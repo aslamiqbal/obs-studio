@@ -2,11 +2,11 @@ Copy and give this prompt to the coding AI agent:
 
 
 
-\---
+---
 
 
 
-\# AI Coding Agent Prompt: Add Egress Start/Stop Control to OBS Studio
+# AI Coding Agent Prompt: Add Egress Start/Stop Control to OBS Studio
 
 
 
@@ -14,7 +14,7 @@ You are an expert C++/Qt developer with strong knowledge of the OBS Studio sourc
 
 
 
-\## Project objective
+## Project objective
 
 
 
@@ -34,37 +34,37 @@ OBS will only send Start and Stop commands to my backend.
 
 
 
-\## Critical requirements
+## Critical requirements
 
 
 
-1\. Do not delete, replace, rename, or redesign any existing OBS GUI.
+1. Do not delete, replace, rename, or redesign any existing OBS GUI.
 
-2\. Keep every existing OBS feature working exactly as it currently works.
+2. Keep every existing OBS feature working exactly as it currently works.
 
-3\. Do not modify the existing Browser Source.
+3. Do not modify the existing Browser Source.
 
-4\. Do not modify OBS streaming, recording, encoder, output, scene, source, or authentication systems.
+4. Do not modify OBS streaming, recording, encoder, output, scene, source, or authentication systems.
 
-5\. Do not place this feature deeply inside OBS core code.
+5. Do not place this feature deeply inside OBS core code.
 
-6\. Implement it as an isolated OBS frontend plugin whenever technically possible.
+6. Implement it as an isolated OBS frontend plugin whenever technically possible.
 
-7\. Make future merges with the latest official OBS GitHub repository as effortless as possible.
+7. Make future merges with the latest official OBS GitHub repository as effortless as possible.
 
-8\. Avoid modifying existing OBS files unless absolutely necessary.
+8. Avoid modifying existing OBS files unless absolutely necessary.
 
-9\. Prefer adding new files and a separate CMake target.
+9. Prefer adding new files and a separate CMake target.
 
-10\. Clearly document every modification made outside the new plugin directory.
+10. Clearly document every modification made outside the new plugin directory.
 
-11\. Do not implement unrelated features.
+11. Do not implement unrelated features.
 
-12\. Do not remove or refactor existing code.
+12. Do not remove or refactor existing code.
 
 
 
-\## System behavior
+## System behavior
 
 
 
@@ -72,21 +72,21 @@ My backend already handles:
 
 
 
-\* Creating or retrieving a room
+* Creating or retrieving a room
 
-\* Silently joining the room
+* Silently joining the room
 
-\* Generating room access tokens
+* Generating room access tokens
 
-\* Retrieving YouTube/Facebook authorization
+* Retrieving YouTube/Facebook authorization
 
-\* Starting Egress
+* Starting Egress
 
-\* Sending the Egress output to YouTube/Facebook
+* Sending the Egress output to YouTube/Facebook
 
-\* Stopping Egress
+* Stopping Egress
 
-\* Managing Egress status and failures
+* Managing Egress status and failures
 
 
 
@@ -98,35 +98,35 @@ OBS only acts as a desktop controller.
 
 OBS Egress Control GUI
 
-&#x20;       |
+        |
 
-&#x20;       | HTTPS request
+        | HTTPS request
 
-&#x20;       v
+        v
 
 My Backend API
 
-&#x20;       |
+        |
 
-&#x20;       | Start or stop Egress
+        | Start or stop Egress
 
-&#x20;       v
+        v
 
 Server-side room and Egress
 
-&#x20;       |
+        |
 
-&#x20;       +--> YouTube
+        +--> YouTube
 
-&#x20;       |
+        |
 
-&#x20;       +--> Facebook
+        +--> Facebook
 
 ```
 
 
 
-\## Required GUI
+## Required GUI
 
 
 
@@ -164,9 +164,9 @@ Status: Offline
 
 
 
-\[ Start Service ]
+[ Start Service ]
 
-\[ Stop Service ]
+[ Stop Service ]
 
 
 
@@ -178,41 +178,11 @@ Ready / Starting / Live / Stopping / Error
 
 
 
-\### Button behavior
+### Button behavior
 
 
 
-\#### Start Service
-
-
-
-When clicked:
-
-
-
-1\. Disable the Start button immediately.
-
-2\. Change status to `Starting`.
-
-3\. Send an authenticated HTTPS request to my backend Start endpoint.
-
-4\. Do not create a Browser Source.
-
-5\. Do not join the room locally.
-
-6\. Do not retrieve YouTube or Facebook tokens.
-
-7\. Do not start normal OBS streaming.
-
-8\. When the backend confirms that Egress has started, show `Live`.
-
-9\. Enable the Stop button.
-
-10\. Store the returned service ID or Egress session ID in memory.
-
-
-
-\#### Stop Service
+#### Start Service
 
 
 
@@ -220,21 +190,51 @@ When clicked:
 
 
 
-1\. Disable the Stop button immediately.
+1. Disable the Start button immediately.
 
-2\. Change status to `Stopping`.
+2. Change status to `Starting`.
 
-3\. Send an authenticated HTTPS request to my backend Stop endpoint.
+3. Send an authenticated HTTPS request to my backend Start endpoint.
 
-4\. When successful, show `Offline`.
+4. Do not create a Browser Source.
 
-5\. Enable the Start button.
+5. Do not join the room locally.
 
-6\. Clear the active local service-session information.
+6. Do not retrieve YouTube or Facebook tokens.
+
+7. Do not start normal OBS streaming.
+
+8. When the backend confirms that Egress has started, show `Live`.
+
+9. Enable the Stop button.
+
+10. Store the returned service ID or Egress session ID in memory.
 
 
 
-\## Service state model
+#### Stop Service
+
+
+
+When clicked:
+
+
+
+1. Disable the Stop button immediately.
+
+2. Change status to `Stopping`.
+
+3. Send an authenticated HTTPS request to my backend Stop endpoint.
+
+4. When successful, show `Offline`.
+
+5. Enable the Start button.
+
+6. Clear the active local service-session information.
+
+
+
+## Service state model
 
 
 
@@ -282,7 +282,7 @@ The Stop button may remain enabled during `Starting` so the user can cancel an i
 
 
 
-\## Backend API abstraction
+## Backend API abstraction
 
 
 
@@ -300,11 +300,11 @@ Example placeholders:
 
 ```text
 
-POST {BACKEND\_BASE\_URL}/api/v1/egress/start
+POST {BACKEND_BASE_URL}/api/v1/egress/start
 
-POST {BACKEND\_BASE\_URL}/api/v1/egress/stop
+POST {BACKEND_BASE_URL}/api/v1/egress/stop
 
-GET  {BACKEND\_BASE\_URL}/api/v1/egress/status
+GET  {BACKEND_BASE_URL}/api/v1/egress/status
 
 ```
 
@@ -318,7 +318,7 @@ Example Start request:
 
 POST /api/v1/egress/start
 
-Authorization: Bearer APP\_ACCESS\_TOKEN
+Authorization: Bearer APP_ACCESS_TOKEN
 
 Content-Type: application/json
 
@@ -330,9 +330,9 @@ Content-Type: application/json
 
 {
 
-&#x20; "client": "obs-studio",
+  "client": "obs-studio",
 
-&#x20; "platform": "windows"
+  "platform": "windows"
 
 }
 
@@ -348,13 +348,13 @@ Example response:
 
 {
 
-&#x20; "success": true,
+  "success": true,
 
-&#x20; "serviceId": "svc\_12345",
+  "serviceId": "svc_12345",
 
-&#x20; "egressId": "egress\_12345",
+  "egressId": "egress_12345",
 
-&#x20; "status": "starting"
+  "status": "starting"
 
 }
 
@@ -370,7 +370,7 @@ Example Stop request:
 
 POST /api/v1/egress/stop
 
-Authorization: Bearer APP\_ACCESS\_TOKEN
+Authorization: Bearer APP_ACCESS_TOKEN
 
 Content-Type: application/json
 
@@ -382,7 +382,7 @@ Content-Type: application/json
 
 {
 
-&#x20; "serviceId": "svc\_12345"
+  "serviceId": "svc_12345"
 
 }
 
@@ -394,7 +394,7 @@ The exact API paths, JSON fields, and authentication provider may change later. 
 
 
 
-\## Required internal architecture
+## Required internal architecture
 
 
 
@@ -408,27 +408,27 @@ plugins/
 
 └── egress-control/
 
-&#x20;   ├── CMakeLists.txt
+    ├── CMakeLists.txt
 
-&#x20;   ├── egress-control-plugin.cpp
+    ├── egress-control-plugin.cpp
 
-&#x20;   ├── egress-control-dock.hpp
+    ├── egress-control-dock.hpp
 
-&#x20;   ├── egress-control-dock.cpp
+    ├── egress-control-dock.cpp
 
-&#x20;   ├── egress-api-client.hpp
+    ├── egress-api-client.hpp
 
-&#x20;   ├── egress-api-client.cpp
+    ├── egress-api-client.cpp
 
-&#x20;   ├── egress-config.hpp
+    ├── egress-config.hpp
 
-&#x20;   ├── egress-state.hpp
+    ├── egress-state.hpp
 
-&#x20;   ├── locale/
+    ├── locale/
 
-&#x20;   │   └── en-US.ini
+    │   └── en-US.ini
 
-&#x20;   └── README.md
+    └── README.md
 
 ```
 
@@ -438,125 +438,125 @@ Use names that match current OBS coding conventions if the latest repository use
 
 
 
-\### Responsibilities
+### Responsibilities
 
 
 
-\#### `egress-control-plugin`
+#### `egress-control-plugin`
 
 
 
-\* Declare the OBS module
+* Declare the OBS module
 
-\* Load translations
+* Load translations
 
-\* Create the dock
+* Create the dock
 
-\* Register the dock through the OBS Frontend API
+* Register the dock through the OBS Frontend API
 
-\* Cleanly unregister and destroy resources during module unload
+* Cleanly unregister and destroy resources during module unload
 
 
 
-\#### `EgressControlDock`
+#### `EgressControlDock`
 
 
 
-\* Own the Qt GUI
+* Own the Qt GUI
 
-\* Display status
+* Display status
 
-\* Handle Start and Stop button clicks
+* Handle Start and Stop button clicks
 
-\* Update button states
+* Update button states
 
-\* Display backend errors
+* Display backend errors
 
-\* Never block the OBS UI thread
+* Never block the OBS UI thread
 
 
 
-\#### `EgressApiClient`
+#### `EgressApiClient`
 
 
 
-\* Perform Start, Stop, and optional Status requests
+* Perform Start, Stop, and optional Status requests
 
-\* Handle HTTP status codes
+* Handle HTTP status codes
 
-\* Parse JSON safely
+* Parse JSON safely
 
-\* Apply request timeouts
+* Apply request timeouts
 
-\* Return structured success/error results
+* Return structured success/error results
 
-\* Keep networking implementation separate from the GUI
+* Keep networking implementation separate from the GUI
 
 
 
-\#### `EgressConfig`
+#### `EgressConfig`
 
 
 
-\* Backend base URL
+* Backend base URL
 
-\* API paths
+* API paths
 
-\* Timeout values
+* Timeout values
 
-\* Optional authorization token provider
+* Optional authorization token provider
 
-\* No production secret hardcoded into source files
+* No production secret hardcoded into source files
 
 
 
-\#### `EgressState`
+#### `EgressState`
 
 
 
-\* Offline
+* Offline
 
-\* Starting
+* Starting
 
-\* Live
+* Live
 
-\* Stopping
+* Stopping
 
-\* Error
+* Error
 
 
 
-\## Networking requirements
+## Networking requirements
 
 
 
-1\. Network requests must be asynchronous.
+1. Network requests must be asynchronous.
 
-2\. Never block the OBS main/UI thread.
+2. Never block the OBS main/UI thread.
 
-3\. Use the networking mechanism already preferred or available in the current OBS/Qt build.
+3. Use the networking mechanism already preferred or available in the current OBS/Qt build.
 
-4\. Apply a reasonable timeout.
+4. Apply a reasonable timeout.
 
-5\. Handle malformed JSON.
+5. Handle malformed JSON.
 
-6\. Handle HTTP errors.
+6. Handle HTTP errors.
 
-7\. Handle network disconnection.
+7. Handle network disconnection.
 
-8\. Handle duplicate button clicks.
+8. Handle duplicate button clicks.
 
-9\. Prevent duplicate Start requests.
+9. Prevent duplicate Start requests.
 
-10\. Treat Stop as idempotent where possible.
+10. Treat Stop as idempotent where possible.
 
-11\. Do not log access tokens or sensitive response data.
+11. Do not log access tokens or sensitive response data.
 
-12\. Use HTTPS only for production configuration.
+12. Use HTTPS only for production configuration.
 
 
 
-\## Authentication boundary
+## Authentication boundary
 
 
 
@@ -574,9 +574,9 @@ class AccessTokenProvider {
 
 public:
 
-&#x20;   virtual \~AccessTokenProvider() = default;
+    virtual ~AccessTokenProvider() = default;
 
-&#x20;   virtual std::string GetAccessToken() const = 0;
+    virtual std::string GetAccessToken() const = 0;
 
 };
 
@@ -592,15 +592,15 @@ For development, a token may be loaded from a local configuration or environment
 
 
 
-\* Never commit a real token
+* Never commit a real token
 
-\* Never print the complete token in logs
+* Never print the complete token in logs
 
-\* Keep token retrieval replaceable
+* Keep token retrieval replaceable
 
 
 
-\## Startup and recovery
+## Startup and recovery
 
 
 
@@ -608,15 +608,15 @@ When the plugin loads:
 
 
 
-1\. Show the dock as Offline initially.
+1. Show the dock as Offline initially.
 
-2\. Optionally call the backend status endpoint.
+2. Optionally call the backend status endpoint.
 
-3\. If an active service already exists for the authenticated user, show `Live`.
+3. If an active service already exists for the authenticated user, show `Live`.
 
-4\. Store the active service ID returned by the backend.
+4. Store the active service ID returned by the backend.
 
-5\. Do not automatically start Egress without explicit user action.
+5. Do not automatically start Egress without explicit user action.
 
 
 
@@ -624,15 +624,15 @@ When OBS closes while Egress is active:
 
 
 
-\* Do not automatically stop Egress unless this behavior is controlled by a clearly named configuration option.
+* Do not automatically stop Egress unless this behavior is controlled by a clearly named configuration option.
 
-\* The server remains the source of truth.
+* The server remains the source of truth.
 
-\* Clean up local networking and Qt objects safely.
+* Clean up local networking and Qt objects safely.
 
 
 
-\## Merge-friendly implementation
+## Merge-friendly implementation
 
 
 
@@ -648,25 +648,25 @@ Therefore:
 
 
 
-1\. Keep the feature inside one independent plugin directory.
+1. Keep the feature inside one independent plugin directory.
 
-2\. Avoid editing `frontend/`, `libobs/`, `libobs-d3d11/`, `plugins/obs-browser/`, or other existing modules.
+2. Avoid editing `frontend/`, `libobs/`, `libobs-d3d11/`, `plugins/obs-browser/`, or other existing modules.
 
-3\. If the root plugin CMake list must be changed, make only the smallest possible additive change.
+3. If the root plugin CMake list must be changed, make only the smallest possible additive change.
 
-4\. Do not reorder or reformat unrelated code.
+4. Do not reorder or reformat unrelated code.
 
-5\. Do not apply repository-wide formatting changes.
+5. Do not apply repository-wide formatting changes.
 
-6\. Do not copy or fork large existing OBS classes.
+6. Do not copy or fork large existing OBS classes.
 
-7\. Use stable public OBS Frontend APIs.
+7. Use stable public OBS Frontend APIs.
 
-8\. Avoid relying on private internal frontend classes.
+8. Avoid relying on private internal frontend classes.
 
-9\. Include a patch or commit separation that allows the feature to be reapplied easily.
+9. Include a patch or commit separation that allows the feature to be reapplied easily.
 
-10\. Place all configuration and API details behind interfaces.
+10. Place all configuration and API details behind interfaces.
 
 
 
@@ -676,7 +676,7 @@ Preferred integration:
 
 ```cmake
 
-add\_subdirectory(egress-control)
+add_subdirectory(egress-control)
 
 ```
 
@@ -686,7 +686,7 @@ Only add this line to the appropriate existing plugin CMake file if required by 
 
 
 
-\## Do not implement
+## Do not implement
 
 
 
@@ -694,41 +694,41 @@ Do not add any of the following:
 
 
 
-\* Browser URL loading
+* Browser URL loading
 
-\* Browser Source customization
+* Browser Source customization
 
-\* Local room joining
+* Local room joining
 
-\* Local WebRTC room rendering
+* Local WebRTC room rendering
 
-\* Local video encoding
+* Local video encoding
 
-\* YouTube token retrieval
+* YouTube token retrieval
 
-\* Facebook token retrieval
+* Facebook token retrieval
 
-\* OBS normal Start Streaming automation
+* OBS normal Start Streaming automation
 
-\* OBS recording automation
+* OBS recording automation
 
-\* Multistream output plugins
+* Multistream output plugins
 
-\* Room participant controls
+* Room participant controls
 
-\* Chat
+* Chat
 
-\* Scene automation
+* Scene automation
 
-\* New login screens
+* New login screens
 
-\* Replacement of existing OBS controls
+* Replacement of existing OBS controls
 
-\* Deletion of any existing code or UI
+* Deletion of any existing code or UI
 
 
 
-\## Logging
+## Logging
 
 
 
@@ -778,7 +778,7 @@ Complete sensitive backend responses
 
 
 
-\## User-visible error examples
+## User-visible error examples
 
 
 
@@ -808,7 +808,7 @@ Do not expose raw stack traces to normal users.
 
 
 
-\## Build target
+## Build target
 
 
 
@@ -834,7 +834,7 @@ Follow the build conventions and dependency versions in the checked-out OBS repo
 
 
 
-\## Acceptance criteria
+## Acceptance criteria
 
 
 
@@ -842,39 +842,39 @@ The task is complete only when:
 
 
 
-1\. The latest OBS source builds successfully on Windows 11.
+1. The latest OBS source builds successfully on Windows 11.
 
-2\. All existing OBS GUIs remain available and unchanged.
+2. All existing OBS GUIs remain available and unchanged.
 
-3\. A separate `Egress Control` dock is available.
+3. A separate `Egress Control` dock is available.
 
-4\. The dock can be shown, hidden, moved, and docked like other OBS docks.
+4. The dock can be shown, hidden, moved, and docked like other OBS docks.
 
-5\. Start sends one backend Start request.
+5. Start sends one backend Start request.
 
-6\. Stop sends one backend Stop request.
+6. Stop sends one backend Stop request.
 
-7\. The UI remains responsive during requests.
+7. The UI remains responsive during requests.
 
-8\. Status and button states update correctly.
+8. Status and button states update correctly.
 
-9\. Network and API failures are handled safely.
+9. Network and API failures are handled safely.
 
-10\. No sensitive token is logged.
+10. No sensitive token is logged.
 
-11\. No existing OBS code is deleted.
+11. No existing OBS code is deleted.
 
-12\. Existing Browser Source behavior remains unchanged.
+12. Existing Browser Source behavior remains unchanged.
 
-13\. Existing OBS streaming and recording behavior remains unchanged.
+13. Existing OBS streaming and recording behavior remains unchanged.
 
-14\. The feature is isolated enough to be reapplied to a newer OBS source version with minimal conflict.
+14. The feature is isolated enough to be reapplied to a newer OBS source version with minimal conflict.
 
-15\. The plugin unloads without crashes or resource leaks.
+15. The plugin unloads without crashes or resource leaks.
 
 
 
-\## Required final output from the coding agent
+## Required final output from the coding agent
 
 
 
@@ -882,29 +882,29 @@ After implementation, provide:
 
 
 
-1\. A summary of the architecture used.
+1. A summary of the architecture used.
 
-2\. A complete list of new files.
+2. A complete list of new files.
 
-3\. A complete list of existing files modified.
+3. A complete list of existing files modified.
 
-4\. The reason for every existing-file modification.
+4. The reason for every existing-file modification.
 
-5\. Full source code for the new plugin.
+5. Full source code for the new plugin.
 
-6\. CMake integration instructions.
+6. CMake integration instructions.
 
-7\. Windows 11 build commands.
+7. Windows 11 build commands.
 
-8\. Backend API configuration instructions.
+8. Backend API configuration instructions.
 
-9\. Instructions for replacing the placeholder access-token provider.
+9. Instructions for replacing the placeholder access-token provider.
 
-10\. Testing steps for Start, Stop, timeout, server error, and OBS restart.
+10. Testing steps for Start, Stop, timeout, server error, and OBS restart.
 
-11\. A merge guide for applying the feature to future OBS versions.
+11. A merge guide for applying the feature to future OBS versions.
 
-12\. A Git patch or clearly separated commit containing only this feature.
+12. A Git patch or clearly separated commit containing only this feature.
 
 
 
@@ -912,7 +912,7 @@ Before writing code, inspect the latest checked-out OBS repository and adapt the
 
 
 
-\---
+---
 
 
 
