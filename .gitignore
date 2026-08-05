@@ -19,6 +19,7 @@
 !.git-blame-ignore-devs
 !.gitmodules
 !.gitignore
+!.claude
 !.mailmap
 !.swift-format
 !AUTHORS
