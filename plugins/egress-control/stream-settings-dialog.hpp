@@ -17,31 +17,34 @@
 
 #pragma once
 
-#include <QWidget>
+#include <QDialog>
 
-class EgressController;
 class QLabel;
+class QLineEdit;
 class QPushButton;
 
-/* Dock contents for the "Egress Control" panel.
+/* Minimal stream destination editor for the console window.
  *
- * A view only: all state lives in EgressController, which is shared with the
- * stream console so both stay in step.
+ * Covers the custom RTMP case (server + stream key), which is what an operator
+ * needs from the simplified console. Preset services with OAuth are configured
+ * in the full OBS settings dialog; this dialog never touches them.
+ *
+ * Built entirely on public obs_service_* and obs_frontend_* calls.
  */
-class EgressControlDock : public QWidget {
+class StreamSettingsDialog : public QDialog {
 	Q_OBJECT
 
 public:
-	EgressControlDock(EgressController *controller, QWidget *parent = nullptr);
+	explicit StreamSettingsDialog(QWidget *parent = nullptr);
 
 private slots:
-	void Refresh();
+	void Save();
 
 private:
-	EgressController *controller_ = nullptr;
+	void LoadCurrentService();
 
-	QLabel *statusValueLabel_ = nullptr;
-	QLabel *messageLabel_ = nullptr;
-	QPushButton *startButton_ = nullptr;
-	QPushButton *stopButton_ = nullptr;
+	QLineEdit *serverEdit_ = nullptr;
+	QLineEdit *streamKeyEdit_ = nullptr;
+	QLabel *noticeLabel_ = nullptr;
+	QPushButton *saveButton_ = nullptr;
 };
