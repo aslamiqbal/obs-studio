@@ -35,6 +35,7 @@
 
 #include "egress-controller.hpp"
 #include "egress-state.hpp"
+#include "nvs-api-endpoints.hpp"
 #include "nvs-identity.hpp"
 
 namespace {
@@ -166,7 +167,7 @@ void NvsFleetClient::Register()
 	body.insert("app_version", QString::fromUtf8(obs_get_version_string()));
 	body.insert("platform", QLatin1String(CLIENT_PLATFORM));
 
-	QNetworkReply *reply = Post("/api/nvs/clients/register", body);
+	QNetworkReply *reply = Post(NvsApiEndpoints::Fleet::Register(), body);
 
 	connect(reply, &QNetworkReply::finished, this, [this, reply]() {
 		reply->deleteLater();
@@ -230,7 +231,7 @@ void NvsFleetClient::SendHeartbeat()
 		pendingAcks_ = QJsonArray();
 	}
 
-	QNetworkReply *reply = Post("/api/nvs/clients/" + clientId_ + "/heartbeat", body);
+	QNetworkReply *reply = Post(NvsApiEndpoints::Fleet::Heartbeat(clientId_), body);
 
 	connect(reply, &QNetworkReply::finished, this, [this, reply]() {
 		reply->deleteLater();
@@ -382,7 +383,7 @@ void NvsFleetClient::QueueAck(const QString &commandId, bool success, const QStr
 
 QNetworkReply *NvsFleetClient::Post(const QString &path, const QJsonObject &body)
 {
-	QNetworkRequest request{QUrl(apiBaseUrl_ + path)};
+	QNetworkRequest request{QUrl(NvsApiEndpoints::Url(apiBaseUrl_, path))};
 	request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
 	request.setTransferTimeout(REQUEST_TIMEOUT_MS);
 

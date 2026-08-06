@@ -17,6 +17,8 @@
 
 #include "egress-config.hpp"
 
+#include "nvs-api-endpoints.hpp"
+
 #include <obs-module.h>
 #include <obs.hpp>
 #include <util/platform.h>
@@ -72,6 +74,11 @@ std::string EnvironmentAccessTokenProvider::GetAccessToken() const
 EgressConfig EgressConfig::Load()
 {
 	EgressConfig config;
+
+	config.baseUrl = QString::fromUtf8(NvsApiEndpoints::DefaultBaseUrl);
+	config.startPath = NvsApiEndpoints::Egress::Start();
+	config.stopPath = NvsApiEndpoints::Egress::Stop();
+	config.statusPath = NvsApiEndpoints::Egress::Status();
 
 	BPtr<char> configPath = obs_module_get_config_path(obs_current_module(), CONFIG_FILE_NAME);
 
@@ -134,11 +141,7 @@ EgressConfig EgressConfig::Load()
 
 QString EgressConfig::UrlFor(const QString &path) const
 {
-	if (path.startsWith('/')) {
-		return baseUrl + path;
-	}
-
-	return baseUrl + "/" + path;
+	return NvsApiEndpoints::Url(baseUrl, path);
 }
 
 bool EgressConfig::IsTransportSecure(const QString &url)

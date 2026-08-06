@@ -18,6 +18,7 @@ target_sources(
     egress-controller.cpp
     egress-controller.hpp
     egress-state.hpp
+    nvs-api-endpoints.hpp
     nvs-credential-store.cpp
     nvs-credential-store.hpp
     nvs-fleet-client.cpp

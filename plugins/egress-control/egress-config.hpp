@@ -55,10 +55,15 @@ private:
  * environment variables for development.
  */
 struct EgressConfig {
+	/* Defaults to the production backend; override in the config file or with
+	 * EGRESS_CONTROL_BASE_URL for local development. */
 	QString baseUrl;
-	QString startPath = "/api/v1/egress/start";
-	QString stopPath = "/api/v1/egress/stop";
-	QString statusPath = "/api/v1/egress/status";
+
+	/* Paths come from NvsApiEndpoints and are only overridden when a
+	 * deployment has genuinely moved a route. */
+	QString startPath;
+	QString stopPath;
+	QString statusPath;
 
 	int requestTimeoutMs = 15000;
 

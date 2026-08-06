@@ -1,4 +1,4 @@
-/******************************************************************************
+﻿/******************************************************************************
     Copyright (C) 2026 by Aslam Iqbal
 
     This program is free software: you can redistribute it and/or modify
@@ -34,6 +34,7 @@
 #include <QUrl>
 #include <QUrlQuery>
 
+#include "nvs-api-endpoints.hpp"
 #include "nvs-credential-store.hpp"
 
 namespace {
@@ -187,7 +188,7 @@ void NvsIdentity::StartFlowRequest(quint16 port)
 	body.insert("redirect_port", int(port));
 	body.insert("device_label", QSysInfo::machineHostName());
 
-	QNetworkRequest request{QUrl(apiBaseUrl_ + "/api/auth/native/start")};
+	QNetworkRequest request{QUrl(NvsApiEndpoints::Url(apiBaseUrl_, NvsApiEndpoints::Auth::NativeStart()))};
 	request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
 	request.setTransferTimeout(REQUEST_TIMEOUT_MS);
 
@@ -288,7 +289,7 @@ void NvsIdentity::ExchangeCode(const QString &sessionId, const QString &code)
 	body.insert("code", code);
 	body.insert("code_verifier", codeVerifier_);
 
-	QNetworkRequest request{QUrl(apiBaseUrl_ + "/api/auth/native/token")};
+	QNetworkRequest request{QUrl(NvsApiEndpoints::Url(apiBaseUrl_, NvsApiEndpoints::Auth::NativeToken()))};
 	request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
 	request.setTransferTimeout(REQUEST_TIMEOUT_MS);
 
@@ -363,7 +364,7 @@ void NvsIdentity::RefreshAccessToken()
 	QJsonObject body;
 	body.insert("refresh_token", refreshToken_);
 
-	QNetworkRequest request{QUrl(apiBaseUrl_ + "/api/auth/refresh")};
+	QNetworkRequest request{QUrl(NvsApiEndpoints::Url(apiBaseUrl_, NvsApiEndpoints::Auth::Refresh()))};
 	request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
 	request.setTransferTimeout(REQUEST_TIMEOUT_MS);
 
@@ -373,7 +374,7 @@ void NvsIdentity::RefreshAccessToken()
 		reply->deleteLater();
 
 		if (reply->error() != QNetworkReply::NoError) {
-			/* A refresh failure is not fatal on its own — the network may
+			/* A refresh failure is not fatal on its own â€” the network may
 			 * simply be down. Only a rejected token ends the session. */
 			const int status =
 				reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
