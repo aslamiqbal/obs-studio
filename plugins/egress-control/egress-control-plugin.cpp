@@ -18,16 +18,19 @@
 #include <obs-frontend-api.h>
 #include <obs-module.h>
 
+#include <QMainWindow>
 #include <QPointer>
 
 #include "egress-control-dock.hpp"
+#include "egress-controller.hpp"
+#include "stream-console-window.hpp"
 
 OBS_DECLARE_MODULE()
 OBS_MODULE_USE_DEFAULT_LOCALE("egress-control", "en-US")
 
 MODULE_EXPORT const char *obs_module_description(void)
 {
-	return "Start and stop a server-side Egress service from an OBS dock";
+	return "Simplified stream console and server-side Egress start/stop control";
 }
 
 namespace {
@@ -35,21 +38,51 @@ namespace {
 /* Identifies the dock for obs_frontend_add_dock_by_id() / _remove_dock(). */
 constexpr const char *DOCK_ID = "egress_control_dock";
 
+/* Shared state behind both the dock and the console window. */
+EgressController *controller = nullptr;
+
 /* Owned by the OBS frontend once registered: obs_frontend_add_dock_by_id()
  * reparents the widget into a dock owned by the main window. QPointer so this
  * goes null if the frontend tears the dock down first. */
 QPointer<EgressControlDock> dock;
 
-void OBSFrontendEvent(enum obs_frontend_event event, void *)
+/* Parented to the OBS main window so it is destroyed with the frontend. */
+QPointer<StreamConsoleWindow> console;
+
+void ShowConsole()
 {
-	if (dock.isNull()) {
+	if (console.isNull()) {
 		return;
 	}
 
+	console->show();
+	console->raise();
+	console->activateWindow();
+}
+
+void OBSFrontendEvent(enum obs_frontend_event event, void *)
+{
+	if (!console.isNull()) {
+		console->HandleFrontendEvent(event);
+	}
+
 	if (event == OBS_FRONTEND_EVENT_FINISHED_LOADING) {
-		dock->QueryInitialStatus();
+		if (controller) {
+			controller->QueryInitialStatus();
+		}
+
+		/* The console is the operator's starting point, so it opens with OBS. */
+		ShowConsole();
 	} else if (event == OBS_FRONTEND_EVENT_EXIT) {
-		dock->HandleExit();
+		if (controller) {
+			controller->HandleExit();
+		}
+
+		/* Release the preview display while the graphics subsystem is still
+		 * alive. */
+		if (!console.isNull()) {
+			console->ReleasePreview();
+		}
 	}
 }
 
@@ -58,15 +91,26 @@ void OBSFrontendEvent(enum obs_frontend_event event, void *)
 bool obs_module_load(void)
 {
 	/* Modules are loaded from OBSBasic::OBSInit(), so the main window already
-	 * exists and the dock can be registered directly. */
-	dock = new EgressControlDock();
+	 * exists and UI can be created here. */
+	QMainWindow *mainWindow = static_cast<QMainWindow *>(obs_frontend_get_main_window());
+
+	controller = new EgressController();
+
+	dock = new EgressControlDock(controller);
 
 	if (!obs_frontend_add_dock_by_id(DOCK_ID, obs_module_text("EgressControl"), dock.data())) {
 		blog(LOG_WARNING, "[egress-control] failed to register dock, plugin will not load");
 		delete dock.data();
 		dock.clear();
+		delete controller;
+		controller = nullptr;
 		return false;
 	}
+
+	console = new StreamConsoleWindow(controller, mainWindow);
+
+	obs_frontend_add_tools_menu_item(
+		obs_module_text("StreamConsole"), [](void *) { ShowConsole(); }, nullptr);
 
 	obs_frontend_add_event_callback(OBSFrontendEvent, nullptr);
 
@@ -79,10 +123,19 @@ void obs_module_unload(void)
 {
 	obs_frontend_remove_event_callback(OBSFrontendEvent, nullptr);
 
+	if (!console.isNull()) {
+		console->ReleasePreview();
+		delete console.data();
+		console.clear();
+	}
+
 	/* Destroys the dock along with the widget it adopted; deleting the widget
 	 * here as well would be a double free. */
 	obs_frontend_remove_dock(DOCK_ID);
 	dock.clear();
+
+	delete controller;
+	controller = nullptr;
 
 	blog(LOG_INFO, "[egress-control] plugin unloaded");
 }
