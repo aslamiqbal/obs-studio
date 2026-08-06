@@ -26,6 +26,7 @@ class QLabel;
 class QLineEdit;
 class QPushButton;
 class QRadioButton;
+class QTimer;
 
 /* The simplified egress window ("nvswinengress").
  *
@@ -81,6 +82,15 @@ private:
 
 	QPushButton *startEgressButton_ = nullptr;
 	QPushButton *exitButton_ = nullptr;
+
+	/* Pulses the record dot while live. A steady dot reads as "armed"; a
+	 * blinking one is the convention for "recording right now". */
+	QTimer *blinkTimer_ = nullptr;
+	bool blinkOn_ = true;
+
+	void SetIdleButton();
+	void StartBlinking();
+	void StopBlinking();
 
 	QLabel *roomNoticeLabel_ = nullptr;
 };

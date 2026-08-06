@@ -23,6 +23,11 @@
 
 #include <QCloseEvent>
 #include <QDesktopServices>
+#include <QIcon>
+#include <QPainter>
+#include <QPixmap>
+#include <QPolygon>
+#include <QTimer>
 #include <QFormLayout>
 #include <QHBoxLayout>
 #include <QLabel>
@@ -42,6 +47,45 @@ constexpr const char *FACEBOOK_LIVE_PRODUCER_URL = "https://www.facebook.com/liv
 /* Prefilled room, so the window works without typing during development. */
 constexpr const char *DEFAULT_ROOM_CODE = "XEJEDF";
 constexpr const char *DEFAULT_ROOM_TOKEN = "my_custom_api_key";
+
+constexpr int ICON_SIZE = 14;
+constexpr int BLINK_INTERVAL_MS = 550;
+
+/* Icons are painted rather than shipped as files: two flat shapes are not worth
+ * asset plumbing, and drawing them keeps them crisp at any DPI. */
+QIcon MakePlayIcon()
+{
+	QPixmap pixmap(ICON_SIZE, ICON_SIZE);
+	pixmap.fill(Qt::transparent);
+
+	QPainter painter(&pixmap);
+	painter.setRenderHint(QPainter::Antialiasing, true);
+	painter.setPen(Qt::NoPen);
+	painter.setBrush(QColor(0x2E, 0xCC, 0x71));
+
+	QPolygon triangle;
+	triangle << QPoint(3, 2) << QPoint(3, ICON_SIZE - 2) << QPoint(ICON_SIZE - 2, ICON_SIZE / 2);
+	painter.drawPolygon(triangle);
+
+	return QIcon(pixmap);
+}
+
+/* `lit` is the blink phase. The dim state keeps the same circle rather than
+ * clearing it, so the button's contents never shift. */
+QIcon MakeRecordIcon(bool lit)
+{
+	QPixmap pixmap(ICON_SIZE, ICON_SIZE);
+	pixmap.fill(Qt::transparent);
+
+	QPainter painter(&pixmap);
+	painter.setRenderHint(QPainter::Antialiasing, true);
+	painter.setPen(Qt::NoPen);
+	painter.setBrush(lit ? QColor(0xE7, 0x4C, 0x3C) : QColor(0xE7, 0x4C, 0x3C, 0x40));
+
+	painter.drawEllipse(1, 1, ICON_SIZE - 2, ICON_SIZE - 2);
+
+	return QIcon(pixmap);
+}
 
 /* rtmp_common carries the per-service limits (Facebook's 4000 kbps cap among
  * them), exactly as the main window's Stream page does. */
@@ -152,7 +196,18 @@ NvsWinEngress::NvsWinEngress(QWidget *parent) : QWidget(parent, Qt::Window)
 	actionRow->addStretch(1);
 
 	startEgressButton_ = new QPushButton(obs_module_text("Engress.Start"), this);
+	startEgressButton_->setIconSize(QSize(ICON_SIZE, ICON_SIZE));
 	actionRow->addWidget(startEgressButton_);
+
+	blinkTimer_ = new QTimer(this);
+	blinkTimer_->setInterval(BLINK_INTERVAL_MS);
+
+	connect(blinkTimer_, &QTimer::timeout, this, [this]() {
+		blinkOn_ = !blinkOn_;
+		startEgressButton_->setIcon(MakeRecordIcon(blinkOn_));
+	});
+
+	SetIdleButton();
 
 	mainLayout->addLayout(actionRow);
 
@@ -331,6 +386,26 @@ void NvsWinEngress::OnStartEgressClicked()
 	obs_frontend_streaming_start();
 }
 
+void NvsWinEngress::SetIdleButton()
+{
+	StopBlinking();
+
+	startEgressButton_->setIcon(MakePlayIcon());
+	startEgressButton_->setText(obs_module_text("Engress.Start"));
+}
+
+void NvsWinEngress::StartBlinking()
+{
+	blinkOn_ = true;
+	startEgressButton_->setIcon(MakeRecordIcon(true));
+	blinkTimer_->start();
+}
+
+void NvsWinEngress::StopBlinking()
+{
+	blinkTimer_->stop();
+}
+
 void NvsWinEngress::HandleFrontendEvent(enum obs_frontend_event event)
 {
 	switch (event) {
@@ -342,6 +417,7 @@ void NvsWinEngress::HandleFrontendEvent(enum obs_frontend_event event)
 		startEgressButton_->setEnabled(true);
 		startEgressButton_->setText(obs_module_text("Engress.Stop"));
 		roomNoticeLabel_->setText(obs_module_text("Engress.Live"));
+		StartBlinking();
 		break;
 	case OBS_FRONTEND_EVENT_STREAMING_STOPPING:
 		startEgressButton_->setEnabled(false);
@@ -349,8 +425,9 @@ void NvsWinEngress::HandleFrontendEvent(enum obs_frontend_event event)
 		break;
 	case OBS_FRONTEND_EVENT_STREAMING_STOPPED:
 		startEgressButton_->setEnabled(true);
-		startEgressButton_->setText(obs_module_text("Engress.Start"));
 		roomNoticeLabel_->setText(obs_module_text("Engress.Stopped"));
+		/* Restores both the play icon and the idle label. */
+		SetIdleButton();
 		break;
 	default:
 		break;
