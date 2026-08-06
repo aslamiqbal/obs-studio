@@ -922,6 +922,24 @@ int main(int argc, char *argv[])
 		return 1;
 	}
 
+	/* Set the working directory to the executable's directory so that
+	 * all relative path lookups (data files, libobs shaders, plugins)
+	 * work regardless of how the process was launched. */
+	{
+		wchar_t exe_path[MAX_PATH];
+		DWORD len = GetModuleFileNameW(NULL, exe_path, MAX_PATH);
+		if (len > 0 && len < MAX_PATH) {
+			/* Strip the filename, keep the directory */
+			for (DWORD i = len - 1; i > 0; i--) {
+				if (exe_path[i] == L'\\' || exe_path[i] == L'/') {
+					exe_path[i] = L'\0';
+					break;
+				}
+			}
+			SetCurrentDirectoryW(exe_path);
+		}
+	}
+
 	// Try to keep this as early as possible
 	install_dll_blocklist_hook();
 

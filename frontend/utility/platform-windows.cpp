@@ -22,6 +22,7 @@
 #include <util/windows/ComPtr.hpp>
 #include <util/windows/WinHandle.hpp>
 #include <util/windows/win-version.h>
+#include <util/platform.h>
 
 #include <Dwmapi.h>
 #include <audiopolicy.h>
@@ -50,11 +51,31 @@ static inline bool check_path(const char *data, const char *path, string &output
 
 bool GetDataFilePath(const char *data, string &output)
 {
+	/* Try CWD-relative first (works when CWD is the exe directory). */
 	if (check_path(data, "data/obs-studio/", output)) {
 		return true;
 	}
 
-	return check_path(data, OBS_DATA_PATH "/obs-studio/", output);
+	if (check_path(data, OBS_DATA_PATH "/obs-studio/", output)) {
+		return true;
+	}
+
+	/* Resolve relative to the executable so launching from any CWD works. */
+	char *exe_dir = os_get_executable_path_ptr(nullptr);
+	if (exe_dir) {
+		string exe_data = string(exe_dir) + "data/obs-studio/";
+		string exe_data_rel = string(exe_dir) + OBS_DATA_PATH "/obs-studio/";
+		bfree(exe_dir);
+
+		if (check_path(data, exe_data.c_str(), output)) {
+			return true;
+		}
+		if (check_path(data, exe_data_rel.c_str(), output)) {
+			return true;
+		}
+	}
+
+	return false;
 }
 
 string GetDefaultVideoSavePath()
