@@ -39,6 +39,10 @@ namespace {
 /* Where an operator fetches a Facebook stream key. */
 constexpr const char *FACEBOOK_LIVE_PRODUCER_URL = "https://www.facebook.com/live/producer?ref=OBS";
 
+/* Prefilled room, so the window works without typing during development. */
+constexpr const char *DEFAULT_ROOM_CODE = "XEJEDF";
+constexpr const char *DEFAULT_ROOM_TOKEN = "my_custom_api_key";
+
 /* rtmp_common carries the per-service limits (Facebook's 4000 kbps cap among
  * them), exactly as the main window's Stream page does. */
 constexpr const char *COMMON_SERVICE_ID = "rtmp_common";
@@ -73,9 +77,11 @@ NvsWinEngress::NvsWinEngress(QWidget *parent) : QWidget(parent, Qt::Window)
 
 	QFormLayout *roomForm = new QFormLayout();
 
-	roomCodeEdit_ = new QLineEdit(this);
+	/* Development defaults so the window is usable without typing; replace or
+	 * clear these before shipping. */
+	roomCodeEdit_ = new QLineEdit(QLatin1String(DEFAULT_ROOM_CODE), this);
 
-	roomTokenEdit_ = new QLineEdit(this);
+	roomTokenEdit_ = new QLineEdit(QLatin1String(DEFAULT_ROOM_TOKEN), this);
 	/* A room token grants access to the room; masked like every other
 	 * credential in NVS. */
 	roomTokenEdit_->setEchoMode(QLineEdit::Password);
