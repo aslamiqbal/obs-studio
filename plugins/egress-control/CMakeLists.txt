@@ -15,7 +15,15 @@ target_sources(
     egress-control-dock.cpp
     egress-control-dock.hpp
     egress-control-plugin.cpp
+    egress-controller.cpp
+    egress-controller.hpp
     egress-state.hpp
+    program-preview-widget.cpp
+    program-preview-widget.hpp
+    stream-console-window.cpp
+    stream-console-window.hpp
+    stream-settings-dialog.cpp
+    stream-settings-dialog.hpp
 )
 
 target_link_libraries(egress-control PRIVATE OBS::libobs OBS::frontend-api Qt::Widgets Qt::Network)

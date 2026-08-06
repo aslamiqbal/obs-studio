@@ -1,22 +1,77 @@
 # Egress Control
 
-Adds an **Egress Control** dock to OBS Studio for starting and stopping a
-server-side Egress service. OBS acts only as a remote control: it does not join
-a room, encode, hold platform tokens, or stream. Every decision is made by the
-backend, which stays the source of truth.
+Adds two things to OBS Studio:
+
+1. A **Stream Console** — a simplified operator window with a program preview,
+   scene selection, streaming start/stop, stream destination settings, and
+   Egress start/stop. It opens automatically at startup.
+2. An **Egress Control** dock for starting and stopping a server-side Egress
+   service.
+
+OBS acts only as a remote control for Egress: it does not join a room, encode,
+hold platform tokens, or stream to the platform itself. Every Egress decision is
+made by the backend, which stays the source of truth.
+
+The normal OBS main window is **not modified**. It stays fully functional behind
+the console, and every existing dock, menu, and control still works.
+
+## Stream Console
+
+Opens at startup, and can be reopened from **Tools → Stream Console**. Closing
+it only hides the window; OBS keeps running.
+
+```
++--------------------------------------------------+
+|              program preview (live)              |
++--------------------------------------------------+
+| Scene: [LiveKit v] [Start Streaming] [Stream      |
+|                     Settings]  Not streaming      |
+| Egress Control [Start Service] [Stop Service] ... |
++--------------------------------------------------+
+```
+
+The preview renders the composited **program output** — the same feed OBS
+streams — using `obs_display_create()` plus `obs_render_main_texture()`, the
+same mechanism the built-in preview uses. It is read-only: no selection, no
+transform handles.
+
+Streaming uses `obs_frontend_streaming_start()` / `_stop()`, so it behaves
+exactly like the button in the Controls dock, and the two stay in sync because
+both react to the same frontend events.
+
+### Stream Settings
+
+A compact editor for the custom RTMP destination (server URL + stream key). It
+deliberately covers only that case:
+
+- If a **preset service** (Twitch, YouTube, …) is configured, the fields become
+  read-only and the dialog points at the main OBS settings. It will not silently
+  replace an OAuth-backed service.
+- If **streaming is active**, saving is refused — the running output would
+  ignore the change anyway.
+
+The stream key is masked on screen and never written to the log.
 
 ## Architecture
 
 | File | Responsibility |
 | --- | --- |
-| `egress-control-plugin.cpp` | Module declaration, dock registration, frontend event hookup |
-| `egress-control-dock.*` | Qt UI and the state machine; no networking |
+| `egress-control-plugin.cpp` | Module declaration, dock + console registration, frontend events |
+| `stream-console-window.*` | Simplified operator window |
+| `program-preview-widget.*` | OBS display embedded in a plugin-owned window |
+| `stream-settings-dialog.*` | Custom RTMP destination editor |
+| `egress-controller.*` | Egress state machine, shared by every view |
+| `egress-control-dock.*` | Dock view onto the controller |
 | `egress-api-client.*` | All backend calls, JSON parsing, error classification |
 | `egress-config.*` | Backend URL, paths, timeouts, access-token provider |
 | `egress-state.hpp` | `EgressState` enum and its locale keys |
 
 The UI never touches the network and the client never touches widgets, so the
-API contract can change without reworking the dock.
+API contract can change without reworking the UI.
+
+`EgressController` is the single owner of Egress state. The dock and the console
+are both views onto it, so there is exactly one API client and one state machine
+no matter how many widgets show Egress controls — they cannot drift apart.
 
 ### States
 
@@ -144,11 +199,27 @@ add_obs_plugin(egress-control)
 To reapply on a newer OBS checkout, copy the directory and re-add that line.
 Nothing in `frontend/`, `libobs/`, or any existing plugin is modified.
 
-Public APIs relied on, all stable frontend API:
+Public APIs relied on, all stable frontend or libobs API:
 
 - `obs_frontend_add_dock_by_id()` / `obs_frontend_remove_dock()`
+- `obs_frontend_add_tools_menu_item()`
 - `obs_frontend_add_event_callback()` / `obs_frontend_remove_event_callback()`
-- `OBS_FRONTEND_EVENT_FINISHED_LOADING`, `OBS_FRONTEND_EVENT_EXIT`
+- `obs_frontend_get_main_window()`
+- `obs_frontend_streaming_start()` / `_stop()` / `_active()`
+- `obs_frontend_get_scenes()` / `obs_frontend_set_current_scene()` / `obs_frontend_get_current_scene()`
+- `obs_frontend_get_streaming_service()` / `obs_frontend_set_streaming_service()` / `obs_frontend_save_streaming_service()`
+- `obs_display_create()` / `obs_display_resize()` / `obs_display_destroy()`, `obs_render_main_texture()`
+- `OBS_FRONTEND_EVENT_FINISHED_LOADING`, `OBS_FRONTEND_EVENT_EXIT`, the streaming
+  events, and the scene list/change events
+
+No private frontend class is referenced. `ProgramPreviewWidget` reimplements the
+minimum of what `OBSQTDisplay` does rather than forking it, because that class
+lives in `frontend/` and is not available to plugins.
+
+**Platform note:** the preview attaches to a native window handle. Windows and
+macOS are handled; on Linux, X11 works and Wayland does not, because the surface
+plumbing the frontend uses for Wayland is not public API. On Wayland the console
+still works and only the preview area stays blank.
 
 If a future release removes `obs_frontend_add_dock_by_id()`, switch to
 `obs_frontend_add_custom_qdock()` and wrap the widget in a `QDockWidget`; that
