@@ -52,6 +52,45 @@ deliberately covers only that case:
 
 The stream key is masked on screen and never written to the log.
 
+## Fleet reporting (admin dashboard)
+
+Once signed in, the client registers itself and then heartbeats, which is what
+populates the `/admin/nvs` dashboard.
+
+```
+sign in  ->  POST /api/nvs/clients/register      (device_id, label, version, platform)
+         ->  POST /api/nvs/clients/{id}/heartbeat   every 15s
+                 up:   egress_state, is_streaming, status, acks for prior commands
+                 down: is_blocked, interval, commands to run now
+```
+
+**Commands arrive in the heartbeat response** rather than being pushed. The
+desktop sits behind arbitrary NAT, so there is no inbound path to it; the
+heartbeat already exists and doubles as the command channel. The cost is up to
+one interval of latency.
+
+Supported: `start_egress`, `stop_egress`, `start_stream`, `stop_stream`,
+`show_console`, `sign_out`, `refresh`.
+
+A command is executed, then acknowledged on the **following** heartbeat, so the
+dashboard shows what actually happened rather than what was dispatched. The one
+exception is `sign_out`, which flushes its acknowledgement first — signing out
+stops the heartbeat that would otherwise carry it.
+
+Other behaviours worth knowing:
+
+- **Device identity** is a UUID minted on first run and kept in
+  `nvs-device.json` in the module config directory. It is opaque and carries
+  nothing about the user or the hardware, and it keeps one machine as one row in
+  the dashboard across restarts.
+- **Blocked clients** keep reporting but refuse every control command except
+  `refresh`, so an admin can disable a machine without losing visibility of it.
+- **A rejected heartbeat** (400/404) clears the client id and re-registers,
+  rather than heartbeating into a void after the server forgets the client.
+- **Signing out stops reporting** entirely: the fleet is keyed on the account.
+- The wire value for state comes from `EgressStateName()`, deliberately separate
+  from the locale key, so translating the UI can never change the protocol.
+
 ## Notification area and hide mode
 
 NVS does **not** create its own tray icon. It finds the one the frontend already
@@ -113,6 +152,7 @@ reads as disabled rather than silently claiming to be on.
 | `nvs-credential-store.*` | DPAPI-sealed credential storage |
 | `nvs-startup.*` | Windows startup entry (writes the hide-mode flag) |
 | `nvs-tray.*` | Notification-area entries, hide-mode detection |
+| `nvs-fleet-client.*` | Registration, heartbeat, remote command execution |
 
 The UI never touches the network and the client never touches widgets, so the
 API contract can change without reworking the UI.

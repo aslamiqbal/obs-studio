@@ -20,6 +20,8 @@ target_sources(
     egress-state.hpp
     nvs-credential-store.cpp
     nvs-credential-store.hpp
+    nvs-fleet-client.cpp
+    nvs-fleet-client.hpp
     nvs-identity.cpp
     nvs-identity.hpp
     nvs-startup.cpp

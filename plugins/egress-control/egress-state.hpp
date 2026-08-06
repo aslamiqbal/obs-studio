@@ -30,6 +30,26 @@ enum class EgressState {
 	Error = 5,
 };
 
+/* Stable wire name for a state, as sent to the backend. Kept separate from the
+ * locale key so translating the UI can never change the protocol. */
+inline const char *EgressStateName(EgressState state)
+{
+	switch (state) {
+	case EgressState::Offline:
+		return "Offline";
+	case EgressState::Starting:
+		return "Starting";
+	case EgressState::Live:
+		return "Live";
+	case EgressState::Stopping:
+		return "Stopping";
+	case EgressState::Error:
+		return "Error";
+	}
+
+	return "Error";
+}
+
 /* Locale key describing a state, resolved through obs_module_text() by the UI. */
 inline const char *EgressStateLocaleKey(EgressState state)
 {

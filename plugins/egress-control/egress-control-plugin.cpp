@@ -24,6 +24,7 @@
 #include "egress-config.hpp"
 #include "egress-control-dock.hpp"
 #include "egress-controller.hpp"
+#include "nvs-fleet-client.hpp"
 #include "nvs-identity.hpp"
 #include "nvs-tray.hpp"
 #include "stream-console-window.hpp"
@@ -58,6 +59,9 @@ QPointer<StreamConsoleWindow> console;
 /* Adds the NVS entries to the frontend's notification-area menu. */
 NvsTray *tray = nullptr;
 
+/* Reports this install to the backend and applies admin commands. */
+NvsFleetClient *fleet = nullptr;
+
 void ShowConsole()
 {
 	if (console.isNull()) {
@@ -89,6 +93,12 @@ void OBSFrontendEvent(enum obs_frontend_event event, void *)
 			tray->Attach();
 		}
 
+		/* Registers as soon as a session is available; a signed-out client
+		 * simply reports nothing. */
+		if (fleet) {
+			fleet->Start();
+		}
+
 		/* The console is the operator's starting point, so it opens with the
 		 * app — except on an automatic startup launch, where the whole point
 		 * is to stay out of the way in the notification area. */
@@ -98,6 +108,11 @@ void OBSFrontendEvent(enum obs_frontend_event event, void *)
 			ShowConsole();
 		}
 	} else if (event == OBS_FRONTEND_EVENT_EXIT) {
+		/* Stop reporting before teardown so no heartbeat races shutdown. */
+		if (fleet) {
+			fleet->Stop();
+		}
+
 		if (controller) {
 			controller->HandleExit();
 		}
@@ -122,7 +137,10 @@ bool obs_module_load(void)
 	 * to the same backend. */
 	EgressConfig config = EgressConfig::Load();
 
-	identity = new NvsIdentity(config.baseUrl);
+	/* Captured before the config is moved into the controller below. */
+	const QString baseUrl = config.baseUrl;
+
+	identity = new NvsIdentity(baseUrl);
 
 	/* Requests carry the signed-in account's token, falling back to the
 	 * development environment variable when nobody is signed in. */
@@ -149,6 +167,9 @@ bool obs_module_load(void)
 	 * the entries go in once loading has finished. */
 	tray = new NvsTray(controller, identity, console.data());
 
+	fleet = new NvsFleetClient(baseUrl, controller, identity);
+	fleet->SetShowConsoleHandler([]() { ShowConsole(); });
+
 	obs_frontend_add_tools_menu_item(
 		obs_module_text("StreamConsole"), [](void *) { ShowConsole(); }, nullptr);
 
@@ -165,6 +186,12 @@ void obs_module_unload(void)
 
 	/* Remove the tray entries first: they live in a menu owned by the main
 	 * window and would outlive this module otherwise. */
+	if (fleet) {
+		fleet->Stop();
+		delete fleet;
+		fleet = nullptr;
+	}
+
 	if (tray) {
 		tray->Detach();
 		delete tray;
