@@ -35,6 +35,8 @@ target_sources(
     nvs-startup.hpp
     nvs-tray.cpp
     nvs-tray.hpp
+    nvs-win-engress.cpp
+    nvs-win-engress.hpp
     program-preview-widget.cpp
     program-preview-widget.hpp
     stream-console-window.cpp

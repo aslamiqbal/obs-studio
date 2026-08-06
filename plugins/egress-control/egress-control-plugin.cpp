@@ -1,4 +1,4 @@
-/******************************************************************************
+﻿/******************************************************************************
     Copyright (C) 2026 by Aslam Iqbal
 
     This program is free software: you can redistribute it and/or modify
@@ -27,6 +27,7 @@
 #include "nvs-fleet-client.hpp"
 #include "nvs-identity.hpp"
 #include "nvs-tray.hpp"
+#include "nvs-win-engress.hpp"
 #include "stream-console-window.hpp"
 
 OBS_DECLARE_MODULE()
@@ -55,6 +56,9 @@ QPointer<EgressControlDock> dock;
 
 /* Parented to the OBS main window so it is destroyed with the frontend. */
 QPointer<StreamConsoleWindow> console;
+
+/* The simplified egress window from the new design; opens at startup. */
+QPointer<NvsWinEngress> engressWindow;
 
 /* Adds the NVS entries to the frontend's notification-area menu. */
 NvsTray *tray = nullptr;
@@ -99,13 +103,15 @@ void OBSFrontendEvent(enum obs_frontend_event event, void *)
 			fleet->Start();
 		}
 
-		/* The console is the operator's starting point, so it opens with the
-		 * app — except on an automatic startup launch, where the whole point
-		 * is to stay out of the way in the notification area. */
+		/* The new engress window is the startup window; the full console
+		 * stays reachable from the tray and the Tools menu. A hidden launch
+		 * still opens nothing. */
 		if (NvsTray::StartedHidden()) {
-			blog(LOG_INFO, "[nvs] started hidden; the console is available from the tray menu");
-		} else {
-			ShowConsole();
+			blog(LOG_INFO, "[nvs] started hidden; windows are available from the tray menu");
+		} else if (!engressWindow.isNull()) {
+			engressWindow->show();
+			engressWindow->raise();
+			engressWindow->activateWindow();
 		}
 	} else if (event == OBS_FRONTEND_EVENT_EXIT) {
 		/* Stop reporting before teardown so no heartbeat races shutdown. */
@@ -117,10 +123,14 @@ void OBSFrontendEvent(enum obs_frontend_event event, void *)
 			controller->HandleExit();
 		}
 
-		/* Release the preview display while the graphics subsystem is still
+		/* Release the preview displays while the graphics subsystem is still
 		 * alive. */
 		if (!console.isNull()) {
 			console->ReleasePreview();
+		}
+
+		if (!engressWindow.isNull()) {
+			engressWindow->ReleasePreview();
 		}
 	}
 }
@@ -162,6 +172,7 @@ bool obs_module_load(void)
 	}
 
 	console = new StreamConsoleWindow(controller, identity, mainWindow);
+	engressWindow = new NvsWinEngress(mainWindow);
 
 	/* Attached later: the frontend creates its tray icon during startup, so
 	 * the entries go in once loading has finished. */
@@ -196,6 +207,12 @@ void obs_module_unload(void)
 		tray->Detach();
 		delete tray;
 		tray = nullptr;
+	}
+
+	if (!engressWindow.isNull()) {
+		engressWindow->ReleasePreview();
+		delete engressWindow.data();
+		engressWindow.clear();
 	}
 
 	if (!console.isNull()) {
