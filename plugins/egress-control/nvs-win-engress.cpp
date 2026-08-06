@@ -39,6 +39,19 @@ namespace {
 /* Where an operator fetches a Facebook stream key. */
 constexpr const char *FACEBOOK_LIVE_PRODUCER_URL = "https://www.facebook.com/live/producer?ref=OBS";
 
+/* rtmp_common carries the per-service limits (Facebook's 4000 kbps cap among
+ * them), exactly as the main window's Stream page does. */
+constexpr const char *COMMON_SERVICE_ID = "rtmp_common";
+
+/* Service names as rtmp_common knows them. */
+constexpr const char *FACEBOOK_SERVICE = "Facebook Live";
+constexpr const char *YOUTUBE_SERVICE = "YouTube - RTMPS";
+
+/* Default ingest endpoints, used when the URL box is left empty — the same
+ * servers the main window's "Default"/"Primary" entries resolve to. */
+constexpr const char *FACEBOOK_DEFAULT_SERVER = "rtmps://live-api-s.facebook.com:443/rtmp/";
+constexpr const char *YOUTUBE_DEFAULT_SERVER = "rtmps://a.rtmps.youtube.com/live2";
+
 } // namespace
 
 NvsWinEngress::NvsWinEngress(QWidget *parent) : QWidget(parent, Qt::Window)
@@ -97,7 +110,7 @@ NvsWinEngress::NvsWinEngress(QWidget *parent) : QWidget(parent, Qt::Window)
 
 	showStreamKeyButton_ = new QPushButton(obs_module_text("StreamSettings.Show"), this);
 	showStreamKeyButton_->setCheckable(true);
-	showStreamKeyButton_->setFixedWidth(56);
+	showStreamKeyButton_->setFixedWidth(64);
 
 	streamKeyRow->addWidget(streamKeyEdit_, 1);
 	streamKeyRow->addWidget(showStreamKeyButton_);
@@ -166,6 +179,8 @@ NvsWinEngress::NvsWinEngress(QWidget *parent) : QWidget(parent, Qt::Window)
 		}
 	});
 
+	connect(startEgressButton_, &QPushButton::clicked, this, &NvsWinEngress::OnStartEgressClicked);
+
 	connect(showStreamKeyButton_, &QPushButton::clicked, this, [this]() {
 		const bool visible = showStreamKeyButton_->isChecked();
 
@@ -174,7 +189,7 @@ NvsWinEngress::NvsWinEngress(QWidget *parent) : QWidget(parent, Qt::Window)
 			obs_module_text(visible ? "StreamSettings.Hide" : "StreamSettings.Show"));
 	});
 
-	/* The platform radios and Start Egress are still skeleton. */
+	/* The platform radios also pick the service for Start Egress above. */
 }
 
 QString NvsWinEngress::RoomUrl() const
@@ -253,6 +268,87 @@ void NvsWinEngress::ApplyRoomUrl()
 
 	roomNoticeLabel_->setText(
 		QString::fromUtf8(obs_module_text("Engress.RoomApplied")).arg(context.sourceName));
+}
+
+void NvsWinEngress::OnStartEgressClicked()
+{
+	/* Same toggle as the main window's button: live means stop. */
+	if (obs_frontend_streaming_active()) {
+		startEgressButton_->setEnabled(false);
+		blog(LOG_INFO, "[nvs] engress: stopping streaming");
+		obs_frontend_streaming_stop();
+		return;
+	}
+
+	const QString key = streamKeyEdit_->text().trimmed();
+
+	if (key.isEmpty()) {
+		roomNoticeLabel_->setText(obs_module_text("Engress.KeyRequired"));
+		return;
+	}
+
+	const bool facebook = facebookRadio_->isChecked();
+
+	QString server = liveUrlEdit_->text().trimmed();
+
+	if (server.isEmpty()) {
+		server = QLatin1String(facebook ? FACEBOOK_DEFAULT_SERVER : YOUTUBE_DEFAULT_SERVER);
+	}
+
+	/* Configured exactly as the main window's Stream page would: an
+	 * rtmp_common service carrying the platform name, so its bitrate and
+	 * keyframe limits are applied by the same machinery. */
+	OBSDataAutoRelease settings = obs_data_create();
+	obs_data_set_string(settings, "service", facebook ? FACEBOOK_SERVICE : YOUTUBE_SERVICE);
+	obs_data_set_string(settings, "server", server.toUtf8().constData());
+	obs_data_set_string(settings, "key", key.toUtf8().constData());
+
+	OBSServiceAutoRelease service =
+		obs_service_create(COMMON_SERVICE_ID, "default_service", settings, nullptr);
+
+	if (!service) {
+		roomNoticeLabel_->setText(obs_module_text("Engress.StartFailed"));
+		return;
+	}
+
+	obs_frontend_set_streaming_service(service);
+	obs_frontend_save_streaming_service();
+
+	/* The service name is safe to log; the key never is. */
+	blog(LOG_INFO, "[nvs] engress: starting streaming to %s",
+	     facebook ? FACEBOOK_SERVICE : YOUTUBE_SERVICE);
+
+	startEgressButton_->setEnabled(false);
+
+	/* From here it is the stock frontend path: BasicOutputHandler, the
+	 * profile's encoders, reconnect — identical to Start Streaming. */
+	obs_frontend_streaming_start();
+}
+
+void NvsWinEngress::HandleFrontendEvent(enum obs_frontend_event event)
+{
+	switch (event) {
+	case OBS_FRONTEND_EVENT_STREAMING_STARTING:
+		startEgressButton_->setEnabled(false);
+		startEgressButton_->setText(obs_module_text("Engress.Starting"));
+		break;
+	case OBS_FRONTEND_EVENT_STREAMING_STARTED:
+		startEgressButton_->setEnabled(true);
+		startEgressButton_->setText(obs_module_text("Engress.Stop"));
+		roomNoticeLabel_->setText(obs_module_text("Engress.Live"));
+		break;
+	case OBS_FRONTEND_EVENT_STREAMING_STOPPING:
+		startEgressButton_->setEnabled(false);
+		startEgressButton_->setText(obs_module_text("Engress.Stopping"));
+		break;
+	case OBS_FRONTEND_EVENT_STREAMING_STOPPED:
+		startEgressButton_->setEnabled(true);
+		startEgressButton_->setText(obs_module_text("Engress.Start"));
+		roomNoticeLabel_->setText(obs_module_text("Engress.Stopped"));
+		break;
+	default:
+		break;
+	}
 }
 
 NvsWinEngress::~NvsWinEngress()

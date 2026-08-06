@@ -83,6 +83,10 @@ void OBSFrontendEvent(enum obs_frontend_event event, void *)
 		console->HandleFrontendEvent(event);
 	}
 
+	if (!engressWindow.isNull()) {
+		engressWindow->HandleFrontendEvent(event);
+	}
+
 	if (event == OBS_FRONTEND_EVENT_FINISHED_LOADING) {
 		/* Restore before probing so the status call carries a token. */
 		if (identity) {

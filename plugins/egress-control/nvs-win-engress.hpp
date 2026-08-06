@@ -17,6 +17,8 @@
 
 #pragma once
 
+#include <obs-frontend-api.h>
+
 #include <QWidget>
 
 class ProgramPreviewWidget;
@@ -44,10 +46,17 @@ public:
 	/* The room link built from the two fields. Empty until both are filled. */
 	QString RoomUrl() const;
 
+	/* Streaming state changes arrive here, routed by the module. */
+	void HandleFrontendEvent(enum obs_frontend_event event);
+
 private slots:
 	/* Points the scene's browser source at the composed room link, which is
 	 * what makes the Room window show the room. */
 	void ApplyRoomUrl();
+
+	/* Drives OBS's own streaming output — the same path as the main window's
+	 * Start Streaming button. */
+	void OnStartEgressClicked();
 
 protected:
 	/* Closing hides rather than quits, same as the console. */
