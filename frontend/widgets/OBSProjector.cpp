@@ -1,4 +1,4 @@
-#include "OBSProjector.hpp"
+﻿#include "OBSProjector.hpp"
 
 #include <OBSApp.hpp>
 #include <components/Multiview.hpp>
@@ -44,7 +44,7 @@ OBSProjector::OBSProjector(QWidget *widget, obs_source_t *source_, int monitor, 
 
 	type = type_;
 #ifndef __APPLE__
-	setWindowIcon(QIcon::fromTheme("obs", QIcon(":/res/images/obs.png")));
+	setWindowIcon(QIcon::fromTheme("nvs", QIcon(":/res/images/nvs.png")));
 #endif
 
 	if (monitor == -1) {

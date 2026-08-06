@@ -1,4 +1,4 @@
-/******************************************************************************
+﻿/******************************************************************************
     Copyright (C) 2023 by Lain Bailey <lain@obsproject.com>
                           Zachary Lund <admin@computerquip.com>
                           Philippe Groarke <philippe.groarke@gmail.com>
@@ -24,13 +24,13 @@ extern bool opt_minimize_tray;
 void OBSBasic::SystemTrayInit()
 {
 #ifdef __APPLE__
-	QIcon trayIconFile = QIcon(":/res/images/obs_macos.svg");
+	QIcon trayIconFile = QIcon(":/res/images/nvs_macos.svg");
 	trayIconFile.setIsMask(true);
 #else
-	QIcon trayIconFile = QIcon(":/res/images/obs.png");
+	QIcon trayIconFile = QIcon(":/res/images/nvs.png");
 #endif
 	trayIcon = new QSystemTrayIcon(QIcon::fromTheme("obs-tray", trayIconFile), this);
-	trayIcon->setToolTip("OBS Studio");
+	trayIcon->setToolTip("NVS");
 
 	trayMenu = new QMenu(this);
 
@@ -102,7 +102,7 @@ void OBSBasic::SysTrayNotify(const QString &text, QSystemTrayIcon::MessageIcon n
 {
 	if (trayIcon && trayIcon->isVisible() && QSystemTrayIcon::supportsMessages()) {
 		QSystemTrayIcon::MessageIcon icon = QSystemTrayIcon::MessageIcon(n);
-		trayIcon->showMessage("OBS Studio", text, icon, 10000);
+		trayIcon->showMessage("NVS", text, icon, 10000);
 	}
 }
 

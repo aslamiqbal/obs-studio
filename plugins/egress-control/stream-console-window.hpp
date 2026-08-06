@@ -22,7 +22,9 @@
 #include <QWidget>
 
 class EgressController;
+class NvsIdentity;
 class ProgramPreviewWidget;
+class QCheckBox;
 class QComboBox;
 class QLabel;
 class QPushButton;
@@ -37,7 +39,7 @@ class StreamConsoleWindow : public QWidget {
 	Q_OBJECT
 
 public:
-	StreamConsoleWindow(EgressController *controller, QWidget *parent = nullptr);
+	StreamConsoleWindow(EgressController *controller, NvsIdentity *identity, QWidget *parent = nullptr);
 	~StreamConsoleWindow() override;
 
 	/* Frontend events are routed here by the module. */
@@ -50,7 +52,10 @@ private slots:
 	void OnStreamButtonClicked();
 	void OnStreamSettingsClicked();
 	void OnSceneSelected(int index);
+	void OnSignInClicked();
+	void OnStartupToggled(bool checked);
 	void RefreshEgress();
+	void RefreshIdentity();
 
 protected:
 	void closeEvent(QCloseEvent *event) override;
@@ -61,8 +66,13 @@ private:
 	void RefreshStreamingState();
 
 	EgressController *controller_ = nullptr;
+	NvsIdentity *identity_ = nullptr;
 
 	ProgramPreviewWidget *preview_ = nullptr;
+
+	QPushButton *signInButton_ = nullptr;
+	QLabel *accountLabel_ = nullptr;
+	QCheckBox *startWithWindowsCheck_ = nullptr;
 
 	QComboBox *sceneSelector_ = nullptr;
 	QPushButton *streamButton_ = nullptr;

@@ -1,4 +1,4 @@
-<RCC>
+﻿<RCC>
   <qresource prefix="/res">
     <file>images/layout-horizontal.svg</file>
     <file>images/layout-vertical.svg</file>
@@ -17,10 +17,10 @@
     <file>images/plus.svg</file>
     <file>images/down.svg</file>
     <file>images/up.svg</file>
-    <file>images/obs.png</file>
-    <file>images/obs_macos.svg</file>
-    <file>images/obs_paused.png</file>
-    <file>images/obs_paused_macos.svg</file>
+    <file>images/nvs.png</file>
+    <file>images/nvs_macos.svg</file>
+    <file>images/nvs_paused.png</file>
+    <file>images/nvs_paused_macos.svg</file>
     <file>images/tray_active.png</file>
     <file>images/tray_active_macos.svg</file>
     <file>images/paused.png</file>

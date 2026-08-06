@@ -18,6 +18,14 @@ target_sources(
     egress-controller.cpp
     egress-controller.hpp
     egress-state.hpp
+    nvs-credential-store.cpp
+    nvs-credential-store.hpp
+    nvs-identity.cpp
+    nvs-identity.hpp
+    nvs-startup.cpp
+    nvs-startup.hpp
+    nvs-tray.cpp
+    nvs-tray.hpp
     program-preview-widget.cpp
     program-preview-widget.hpp
     stream-console-window.cpp
@@ -31,6 +39,9 @@ target_link_libraries(egress-control PRIVATE OBS::libobs OBS::frontend-api Qt::W
 if(OS_WINDOWS)
   configure_file(cmake/windows/obs-module.rc.in egress-control.rc)
   target_sources(egress-control PRIVATE egress-control.rc)
+
+  # Crypt32 provides DPAPI, used to seal stored credentials at rest.
+  target_link_libraries(egress-control PRIVATE crypt32)
 endif()
 
 set_target_properties_obs(egress-control PROPERTIES FOLDER plugins PREFIX "" AUTOMOC ON)

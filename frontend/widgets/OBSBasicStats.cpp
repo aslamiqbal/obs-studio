@@ -1,4 +1,4 @@
-#include "OBSBasicStats.hpp"
+﻿#include "OBSBasicStats.hpp"
 
 #include <widgets/OBSBasic.hpp>
 
@@ -173,7 +173,7 @@ OBSBasicStats::OBSBasicStats(QWidget *parent, bool closable)
 
 	setWindowTitle(QTStr("Basic.Stats"));
 #ifndef __APPLE__
-	setWindowIcon(QIcon::fromTheme("obs", QIcon(":/res/images/obs.png")));
+	setWindowIcon(QIcon::fromTheme("nvs", QIcon(":/res/images/nvs.png")));
 #endif
 
 	setWindowModality(Qt::NonModal);

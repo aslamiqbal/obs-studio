@@ -21,8 +21,11 @@
 #include <QMainWindow>
 #include <QPointer>
 
+#include "egress-config.hpp"
 #include "egress-control-dock.hpp"
 #include "egress-controller.hpp"
+#include "nvs-identity.hpp"
+#include "nvs-tray.hpp"
 #include "stream-console-window.hpp"
 
 OBS_DECLARE_MODULE()
@@ -41,6 +44,9 @@ constexpr const char *DOCK_ID = "egress_control_dock";
 /* Shared state behind both the dock and the console window. */
 EgressController *controller = nullptr;
 
+/* Account session shared by every component that calls the backend. */
+NvsIdentity *identity = nullptr;
+
 /* Owned by the OBS frontend once registered: obs_frontend_add_dock_by_id()
  * reparents the widget into a dock owned by the main window. QPointer so this
  * goes null if the frontend tears the dock down first. */
@@ -48,6 +54,9 @@ QPointer<EgressControlDock> dock;
 
 /* Parented to the OBS main window so it is destroyed with the frontend. */
 QPointer<StreamConsoleWindow> console;
+
+/* Adds the NVS entries to the frontend's notification-area menu. */
+NvsTray *tray = nullptr;
 
 void ShowConsole()
 {
@@ -67,12 +76,27 @@ void OBSFrontendEvent(enum obs_frontend_event event, void *)
 	}
 
 	if (event == OBS_FRONTEND_EVENT_FINISHED_LOADING) {
+		/* Restore before probing so the status call carries a token. */
+		if (identity) {
+			identity->RestoreSession();
+		}
+
 		if (controller) {
 			controller->QueryInitialStatus();
 		}
 
-		/* The console is the operator's starting point, so it opens with OBS. */
-		ShowConsole();
+		if (tray) {
+			tray->Attach();
+		}
+
+		/* The console is the operator's starting point, so it opens with the
+		 * app — except on an automatic startup launch, where the whole point
+		 * is to stay out of the way in the notification area. */
+		if (NvsTray::StartedHidden()) {
+			blog(LOG_INFO, "[nvs] started hidden; the console is available from the tray menu");
+		} else {
+			ShowConsole();
+		}
 	} else if (event == OBS_FRONTEND_EVENT_EXIT) {
 		if (controller) {
 			controller->HandleExit();
@@ -94,7 +118,17 @@ bool obs_module_load(void)
 	 * exists and UI can be created here. */
 	QMainWindow *mainWindow = static_cast<QMainWindow *>(obs_frontend_get_main_window());
 
-	controller = new EgressController();
+	/* Loaded once and shared: the identity service and the Egress client talk
+	 * to the same backend. */
+	EgressConfig config = EgressConfig::Load();
+
+	identity = new NvsIdentity(config.baseUrl);
+
+	/* Requests carry the signed-in account's token, falling back to the
+	 * development environment variable when nobody is signed in. */
+	config.tokenProvider = identity->TokenProvider(config.tokenProvider);
+
+	controller = new EgressController(std::move(config));
 
 	dock = new EgressControlDock(controller);
 
@@ -104,10 +138,16 @@ bool obs_module_load(void)
 		dock.clear();
 		delete controller;
 		controller = nullptr;
+		delete identity;
+		identity = nullptr;
 		return false;
 	}
 
-	console = new StreamConsoleWindow(controller, mainWindow);
+	console = new StreamConsoleWindow(controller, identity, mainWindow);
+
+	/* Attached later: the frontend creates its tray icon during startup, so
+	 * the entries go in once loading has finished. */
+	tray = new NvsTray(controller, identity, console.data());
 
 	obs_frontend_add_tools_menu_item(
 		obs_module_text("StreamConsole"), [](void *) { ShowConsole(); }, nullptr);
@@ -123,6 +163,14 @@ void obs_module_unload(void)
 {
 	obs_frontend_remove_event_callback(OBSFrontendEvent, nullptr);
 
+	/* Remove the tray entries first: they live in a menu owned by the main
+	 * window and would outlive this module otherwise. */
+	if (tray) {
+		tray->Detach();
+		delete tray;
+		tray = nullptr;
+	}
+
 	if (!console.isNull()) {
 		console->ReleasePreview();
 		delete console.data();
@@ -136,6 +184,9 @@ void obs_module_unload(void)
 
 	delete controller;
 	controller = nullptr;
+
+	delete identity;
+	identity = nullptr;
 
 	blog(LOG_INFO, "[egress-control] plugin unloaded");
 }

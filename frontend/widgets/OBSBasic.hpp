@@ -1,4 +1,4 @@
-/******************************************************************************
+﻿/******************************************************************************
     Copyright (C) 2023 by Lain Bailey <lain@obsproject.com>
 
     This program is free software: you can redistribute it and/or modify
@@ -723,20 +723,20 @@ private:
 			TaskbarOverlaySetStatus(TaskbarOverlayStatusInactive);
 			if (trayIcon && trayIcon->isVisible()) {
 #ifdef __APPLE__
-				QIcon trayIconFile = QIcon(":/res/images/obs_macos.svg");
+				QIcon trayIconFile = QIcon(":/res/images/nvs_macos.svg");
 				trayIconFile.setIsMask(true);
 #else
-				QIcon trayIconFile = QIcon(":/res/images/obs.png");
+				QIcon trayIconFile = QIcon(":/res/images/nvs.png");
 #endif
 				trayIcon->setIcon(QIcon::fromTheme("obs-tray", trayIconFile));
 			}
 		} else if (outputHandler->Active() && trayIcon && trayIcon->isVisible()) {
 			if (os_atomic_load_bool(&recording_paused)) {
 #ifdef __APPLE__
-				QIcon trayIconFile = QIcon(":/res/images/obs_paused_macos.svg");
+				QIcon trayIconFile = QIcon(":/res/images/nvs_paused_macos.svg");
 				trayIconFile.setIsMask(true);
 #else
-				QIcon trayIconFile = QIcon(":/res/images/obs_paused.png");
+				QIcon trayIconFile = QIcon(":/res/images/nvs_paused.png");
 #endif
 				trayIcon->setIcon(QIcon::fromTheme("obs-tray-paused", trayIconFile));
 				TaskbarOverlaySetStatus(TaskbarOverlayStatusPaused);

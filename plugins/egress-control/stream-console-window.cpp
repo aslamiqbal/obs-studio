@@ -20,23 +20,28 @@
 #include <obs-module.h>
 #include <obs.hpp>
 
+#include <QCheckBox>
 #include <QCloseEvent>
 #include <QComboBox>
 #include <QFont>
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QMessageBox>
 #include <QPushButton>
 #include <QVBoxLayout>
 
 #include "egress-controller.hpp"
 #include "egress-state.hpp"
+#include "nvs-identity.hpp"
+#include "nvs-startup.hpp"
 #include "program-preview-widget.hpp"
 #include "stream-settings-dialog.hpp"
 
-StreamConsoleWindow::StreamConsoleWindow(EgressController *controller, QWidget *parent)
+StreamConsoleWindow::StreamConsoleWindow(EgressController *controller, NvsIdentity *identity, QWidget *parent)
 	: QWidget(parent, Qt::Window),
-	  controller_(controller)
+	  controller_(controller),
+	  identity_(identity)
 {
 	setObjectName("streamConsoleWindow");
 	setWindowTitle(obs_module_text("StreamConsole"));
@@ -92,6 +97,34 @@ StreamConsoleWindow::StreamConsoleWindow(EgressController *controller, QWidget *
 
 	mainLayout->addLayout(egressRow);
 
+	/* Row 3: account and desktop integration. */
+	QHBoxLayout *accountRow = new QHBoxLayout();
+
+	signInButton_ = new QPushButton(this);
+	accountLabel_ = new QLabel(this);
+	startWithWindowsCheck_ = new QCheckBox(obs_module_text("StartWithWindows"), this);
+
+	if (!NvsStartup::IsSupported()) {
+		startWithWindowsCheck_->setEnabled(false);
+		startWithWindowsCheck_->setToolTip(obs_module_text("StartWithWindows.Unsupported"));
+	} else {
+		startWithWindowsCheck_->setChecked(NvsStartup::IsEnabled());
+	}
+
+	accountRow->addWidget(signInButton_);
+	accountRow->addWidget(accountLabel_, 1);
+	accountRow->addWidget(startWithWindowsCheck_);
+
+	mainLayout->addLayout(accountRow);
+
+	connect(signInButton_, &QPushButton::clicked, this, &StreamConsoleWindow::OnSignInClicked);
+	connect(startWithWindowsCheck_, &QCheckBox::toggled, this, &StreamConsoleWindow::OnStartupToggled);
+
+	connect(identity_, &NvsIdentity::Changed, this, &StreamConsoleWindow::RefreshIdentity);
+	connect(identity_, &NvsIdentity::SignInFailed, this, [this](const QString &message) {
+		QMessageBox::warning(this, obs_module_text("SignIn"), message);
+	});
+
 	connect(streamButton_, &QPushButton::clicked, this, &StreamConsoleWindow::OnStreamButtonClicked);
 	connect(streamSettingsButton_, &QPushButton::clicked, this, &StreamConsoleWindow::OnStreamSettingsClicked);
 	connect(sceneSelector_, &QComboBox::currentIndexChanged, this, &StreamConsoleWindow::OnSceneSelected);
@@ -111,6 +144,7 @@ StreamConsoleWindow::StreamConsoleWindow(EgressController *controller, QWidget *
 	RefreshSceneList();
 	RefreshStreamingState();
 	RefreshEgress();
+	RefreshIdentity();
 }
 
 StreamConsoleWindow::~StreamConsoleWindow()
@@ -253,6 +287,54 @@ void StreamConsoleWindow::RefreshStreamingState()
 
 	/* Changing the destination while live has no effect on the running output. */
 	streamSettingsButton_->setEnabled(!active);
+}
+
+void StreamConsoleWindow::OnSignInClicked()
+{
+	if (identity_->IsSigningIn()) {
+		identity_->CancelSignIn();
+		return;
+	}
+
+	if (identity_->IsSignedIn()) {
+		identity_->SignOut();
+		return;
+	}
+
+	identity_->SignIn();
+}
+
+void StreamConsoleWindow::OnStartupToggled(bool checked)
+{
+	if (NvsStartup::SetEnabled(checked)) {
+		return;
+	}
+
+	/* The registry write failed, so put the checkbox back where it was rather
+	 * than leaving it claiming something untrue. */
+	QSignalBlocker blocker(startWithWindowsCheck_);
+	startWithWindowsCheck_->setChecked(NvsStartup::IsEnabled());
+
+	QMessageBox::warning(this, obs_module_text("StartWithWindows"),
+			     obs_module_text("StartWithWindows.Failed"));
+}
+
+void StreamConsoleWindow::RefreshIdentity()
+{
+	if (identity_->IsSigningIn()) {
+		signInButton_->setText(obs_module_text("SignIn.Cancel"));
+		accountLabel_->setText(obs_module_text("SignIn.WaitingForBrowser"));
+		return;
+	}
+
+	if (identity_->IsSignedIn()) {
+		signInButton_->setText(obs_module_text("SignOut"));
+		accountLabel_->setText(identity_->DisplayName());
+		return;
+	}
+
+	signInButton_->setText(obs_module_text("SignIn"));
+	accountLabel_->setText(obs_module_text("SignIn.NotSignedIn"));
 }
 
 void StreamConsoleWindow::RefreshEgress()

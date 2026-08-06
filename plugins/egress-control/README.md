@@ -52,6 +52,50 @@ deliberately covers only that case:
 
 The stream key is masked on screen and never written to the log.
 
+## Notification area and hide mode
+
+NVS does **not** create its own tray icon. It finds the one the frontend already
+owns and appends a section above `Exit`, so there is a single icon and every
+existing entry (Show/Hide, streaming, recording, projectors) is untouched:
+
+```
+Show
+Open Preview Projector    >
+Open Program Projector    >
+Start Streaming
+Start Recording
+Start Replay Buffer
+Start Virtual Camera
+------------------------------
+Stream Console                 <- NVS
+Sign In / Sign Out (name)      <- NVS
+Start Service (Offline)        <- NVS, state shown inline
+Stop Service                   <- NVS, enabled only when stoppable
+------------------------------
+Exit
+```
+
+The entries are removed again on module unload, since they live in a menu owned
+by the main window and would otherwise outlive the plugin.
+
+### Hide mode
+
+"Start with Windows" writes this to `HKCU\...\CurrentVersion\Run`:
+
+```
+"C:\path\to\nvs64.exe" --minimize-to-tray
+```
+
+`--minimize-to-tray` is a stock OBS option: the frontend keeps the main window
+hidden at startup whenever the tray is available (`SysTrayEnabled`, on by
+default). NVS additionally suppresses the Stream Console auto-open when that
+flag is present — otherwise a "hidden" launch would still pop a window. The
+console stays one click away in the tray menu.
+
+Nothing is written to the registry unless the user ticks the checkbox, and the
+checkbox reflects the *current* executable, so a stale entry from another build
+reads as disabled rather than silently claiming to be on.
+
 ## Architecture
 
 | File | Responsibility |
@@ -65,6 +109,10 @@ The stream key is masked on screen and never written to the log.
 | `egress-api-client.*` | All backend calls, JSON parsing, error classification |
 | `egress-config.*` | Backend URL, paths, timeouts, access-token provider |
 | `egress-state.hpp` | `EgressState` enum and its locale keys |
+| `nvs-identity.*` | Loopback + PKCE sign-in, token refresh |
+| `nvs-credential-store.*` | DPAPI-sealed credential storage |
+| `nvs-startup.*` | Windows startup entry (writes the hide-mode flag) |
+| `nvs-tray.*` | Notification-area entries, hide-mode detection |
 
 The UI never touches the network and the client never touches widgets, so the
 API contract can change without reworking the UI.

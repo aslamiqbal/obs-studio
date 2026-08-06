@@ -62,9 +62,9 @@ const char *LocaleKeyForError(EgressApiError error, const char *fallbackLocaleKe
 
 } // namespace
 
-EgressController::EgressController(QObject *parent) : QObject(parent)
+EgressController::EgressController(EgressConfig config, QObject *parent) : QObject(parent)
 {
-	apiClient_ = new EgressApiClient(EgressConfig::Load(), this);
+	apiClient_ = new EgressApiClient(std::move(config), this);
 
 	connect(apiClient_, &EgressApiClient::StartFinished, this, &EgressController::OnStartFinished);
 	connect(apiClient_, &EgressApiClient::StopFinished, this, &EgressController::OnStopFinished);

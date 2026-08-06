@@ -33,7 +33,7 @@ class EgressController : public QObject {
 	Q_OBJECT
 
 public:
-	explicit EgressController(QObject *parent = nullptr);
+	explicit EgressController(EgressConfig config, QObject *parent = nullptr);
 
 	EgressState State() const { return state_; }
 	QString MessageText() const { return messageText_; }

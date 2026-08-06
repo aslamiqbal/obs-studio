@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="UTF-8"?>
+﻿<?xml version="1.0" encoding="UTF-8"?>
 <ui version="4.0">
  <class>OBSPermissions</class>
  <widget class="QDialog" name="OBSPermissions">
@@ -27,7 +27,7 @@
   </property>
   <property name="windowIcon">
    <iconset resource="obs.qrc">
-    <normaloff>:/res/images/obs.png</normaloff>:/res/images/obs.png</iconset>
+    <normaloff>:/res/images/nvs.png</normaloff>:/res/images/nvs.png</iconset>
   </property>
   <property name="styleSheet">
    <string notr="true"/>

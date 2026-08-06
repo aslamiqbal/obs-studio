@@ -36,14 +36,15 @@ OBSAbout::OBSAbout(QWidget *parent) : QDialog(parent), ui(new Ui::OBSAbout)
 	if (steam) {
 		delete ui->donate;
 	} else {
-		ui->donate->setText("&nbsp;&nbsp;<a href='https://obsproject.com/contribute'>" + QTStr("About.Donate") +
-				    "</a>");
+		ui->donate->setText("&nbsp;&nbsp;<a href='https://nadavox.com'>" + QTStr("About.Donate") + "</a>");
 		ui->donate->setTextInteractionFlags(Qt::TextBrowserInteraction);
 		ui->donate->setOpenExternalLinks(true);
 	}
 
-	ui->getInvolved->setText("&nbsp;&nbsp;<a href='https://obsproject.com/developer-contributing'>" +
-				 QTStr("About.GetInvolved") + "</a>");
+	/* Upstream attribution: NVS is a derivative of OBS Studio and keeps a link
+	 * back to the project it is built on. */
+	ui->getInvolved->setText("&nbsp;&nbsp;<a href='https://obsproject.com'>" + QTStr("About.GetInvolved") +
+				 "</a>");
 	ui->getInvolved->setTextInteractionFlags(Qt::TextBrowserInteraction);
 	ui->getInvolved->setOpenExternalLinks(true);
 

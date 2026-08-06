@@ -1,4 +1,4 @@
-/******************************************************************************
+﻿/******************************************************************************
     Copyright (C) 2023 by Lain Bailey <lain@obsproject.com>
                           Zachary Lund <admin@computerquip.com>
                           Philippe Groarke <philippe.groarke@gmail.com>
@@ -305,10 +305,10 @@ void OBSBasic::PauseRecording()
 		TaskbarOverlaySetStatus(TaskbarOverlayStatusPaused);
 		if (trayIcon && trayIcon->isVisible()) {
 #ifdef __APPLE__
-			QIcon trayIconFile = QIcon(":/res/images/obs_paused_macos.svg");
+			QIcon trayIconFile = QIcon(":/res/images/nvs_paused_macos.svg");
 			trayIconFile.setIsMask(true);
 #else
-			QIcon trayIconFile = QIcon(":/res/images/obs_paused.png");
+			QIcon trayIconFile = QIcon(":/res/images/nvs_paused.png");
 #endif
 			trayIcon->setIcon(QIcon::fromTheme("obs-tray-paused", trayIconFile));
 		}

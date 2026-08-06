@@ -1,0 +1,120 @@
+@OBSThemeMeta {
+    name: 'NVS Green';
+    id: 'com.nadavox.NVS.Green';
+    extends: 'com.obsproject.Yami';
+    author: 'nadavox';
+    dark: 'true';
+}
+
+@OBSThemeVars {
+    /* Neutrals carry a green cast so the shell reads as green rather than as a
+     * grey theme with green buttons. */
+    --grey1: rgb(150,178,166);
+    --grey2: rgb(122,150,138);
+    --grey3: rgb(48,74,64);
+    --grey4: rgb(38,60,52);
+    --grey5: rgb(30,48,42);
+    --grey6: rgb(23,38,33);
+    --grey7: rgb(16,28,24);
+    --grey8: rgb(10,19,16);
+
+    /* NVS green ramp — the same values used by the application icon. */
+    --green1: rgb(110,231,183);
+    --green2: rgb(52,211,153);
+    --green3: rgb(16,185,129);
+    --green4: rgb(5,150,105);
+    --green5: rgb(4,120,87);
+    --green6: rgb(6,95,70);
+
+    --primary: var(--green3);
+    --primary_light: var(--green2);
+    --primary_lighter: var(--green1);
+    --primary_dark: var(--green5);
+    --primary_darker: var(--green6);
+
+    --bg_base: var(--grey6);
+    --bg_window: var(--grey7);
+    --bg_preview: rgb(12,22,19);
+
+    --border_color: var(--grey5);
+
+    --input_bg: var(--grey6);
+    --input_bg_hover: var(--grey5);
+    --input_bg_focus: var(--grey5);
+
+    --input_border: var(--grey3);
+    --input_border_hover: var(--primary);
+    --input_border_focus: var(--primary_light);
+
+    --list_item_bg_selected: var(--primary_dark);
+    --list_item_bg_hover: var(--grey4);
+
+    --button_bg: var(--grey4);
+    --button_bg_hover: var(--primary_dark);
+    --button_bg_down: var(--primary_darker);
+    --button_bg_disabled: var(--grey6);
+
+    --button_border: var(--grey3);
+    --button_border_hover: var(--primary);
+    --button_border_focus: var(--primary_light);
+
+    --tab_bg: var(--grey5);
+    --tab_bg_hover: var(--grey4);
+    --tab_bg_down: var(--grey7);
+    --tab_bg_disabled: var(--grey6);
+
+    --tab_border: var(--grey3);
+    --tab_border_hover: var(--primary);
+    --tab_border_focus: var(--primary);
+    --tab_border_selected: var(--primary);
+
+    --scrollbar_handle: var(--grey3);
+    --scrollbar_hover: var(--primary);
+    --scrollbar_down: var(--primary_dark);
+
+    --toolbutton_bg: var(--grey4);
+    --toolbutton_bg_hover: var(--primary_dark);
+    --toolbutton_bg_down: var(--primary_darker);
+    --toolbutton_bg_disabled: var(--grey5);
+}
+
+QDockWidget::title {
+    background-color: var(--grey5);
+}
+
+/* Selected scene/source rows use the brand green rather than the stock blue. */
+QMenu::item:selected,
+QListWidget::item:selected,
+SceneTree::item:selected,
+SourceTree::item:selected {
+    background-color: var(--primary_dark);
+}
+
+QMenu::item:hover,
+QListWidget::item:hover,
+SceneTree::item:hover,
+SourceTree::item:hover {
+    background-color: var(--grey4);
+}
+
+QTabBar::tab:top:selected {
+    border-bottom: 2px solid var(--primary);
+}
+
+QGroupBox::title {
+    color: var(--primary_lighter);
+}
+
+/* Audio meters follow the same green ramp; warning and error stay distinct so
+ * clipping is still obvious at a glance. */
+VolumeMeter {
+    qproperty-backgroundNominalColor: rgb(6,95,70);
+    qproperty-backgroundWarningColor: rgb(128,80,0);
+    qproperty-backgroundErrorColor: rgb(128,9,0);
+    qproperty-foregroundNominalColor: rgb(52,211,153);
+    qproperty-foregroundWarningColor: rgb(255,193,76);
+    qproperty-foregroundErrorColor: rgb(255,89,76);
+    qproperty-magnitudeColor: palette(window);
+    qproperty-majorTickColor: palette(window-text);
+    qproperty-minorTickColor: palette(mid);
+}
