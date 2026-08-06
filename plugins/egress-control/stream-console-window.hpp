@@ -1,4 +1,4 @@
-/******************************************************************************
+﻿/******************************************************************************
     Copyright (C) 2026 by Aslam Iqbal
 
     This program is free software: you can redistribute it and/or modify
@@ -19,7 +19,13 @@
 
 #include <obs-frontend-api.h>
 
+#include <QList>
+#include <QStringList>
 #include <QWidget>
+
+#include "nvs-multi-rtmp.hpp"
+#include "nvs-room-client.hpp"
+#include "nvs-stream-target-client.hpp"
 
 class EgressController;
 class NvsIdentity;
@@ -29,6 +35,7 @@ class QComboBox;
 class QLabel;
 class QLineEdit;
 class QPushButton;
+class QTableWidget;
 
 /* Simplified operator console: program preview plus the few controls a
  * broadcast operator needs.
@@ -50,13 +57,18 @@ public:
 	void ReleasePreview();
 
 private slots:
-	void OnStreamButtonClicked();
+	void OnRefreshRoomsClicked();
+	void OnFetchJoinUrlClicked();
+	void OnApplyRoomToBrowserSource();
+	void OnRoomsFetched(const QList<NvsRoomInfo> &rooms);
+	void OnTargetsFetched(const QList<NvsStreamTarget> &targets);
+	void OnPushDestinationsClicked();
+	void OnStartDestinationsClicked();
+	void OnStopDestinationsClicked();
+	void OnJoinUrlFetched(const QString &address, const QString &token);
 	void OnSceneSelected(int index);
 	void OnSignInClicked();
 	void OnStartupToggled(bool checked);
-	void OnServiceSelected(int index);
-	void OnToggleKeyVisibility();
-	void OnApplyStreamSettings();
 	void RefreshEgress();
 	void RefreshIdentity();
 
@@ -68,18 +80,22 @@ private:
 	void RefreshCurrentScene();
 	void RefreshStreamingState();
 
-	/* Stream destination, rendered inline rather than in a separate dialog. */
-	QWidget *BuildStreamGroup();
+	/* Room the console broadcasts, and the credentials that render it. */
+	QWidget *BuildRoomGroup();
+	void LoadRoomSettings();
+	void SaveRoomSettings() const;
+	QString SelectedRoomId() const;
 
-	/* Fills the service and server lists. Must run after all modules have
-	 * loaded, since rtmp-services registers after this plugin. */
+
+	/* One-time setup once every module has loaded. */
 	void InitStreamSettings();
-	void PopulateServices();
-	void PopulateServersFor(const QString &serviceName);
-	void LoadCurrentService();
-	void RefreshRecommendations();
-	void ApplyServerRowMode();
-	bool IsCustomServiceSelected() const;
+
+	/* Broadcast destinations: load from the encrypted store, push the current
+	 * selection to the controller, and persist edits. */
+	void LoadDestinations();
+	void ApplyDestinations();
+	void SaveDestinations() const;
+	void RefreshDestinationsNotice();
 
 	EgressController *controller_ = nullptr;
 	NvsIdentity *identity_ = nullptr;
@@ -90,32 +106,51 @@ private:
 	QLabel *accountLabel_ = nullptr;
 	QCheckBox *startWithWindowsCheck_ = nullptr;
 
+	/* Room selection and the credentials that render it. */
+	NvsRoomClient *roomClient_ = nullptr;
+	QComboBox *roomSelector_ = nullptr;
+	QPushButton *refreshRoomsButton_ = nullptr;
+	QLineEdit *roomAddressEdit_ = nullptr;
+	QLineEdit *roomTokenEdit_ = nullptr;
+	QPushButton *fetchJoinUrlButton_ = nullptr;
+	QPushButton *applyRoomButton_ = nullptr;
+	QLabel *roomNoticeLabel_ = nullptr;
+
 	QComboBox *sceneSelector_ = nullptr;
-	QPushButton *streamButton_ = nullptr;
 	QLabel *streamStatusLabel_ = nullptr;
 
-	/* Stream destination controls (formerly the Stream Settings dialog). */
-	QComboBox *serviceCombo_ = nullptr;
-	QComboBox *serverCombo_ = nullptr;
-	QLineEdit *customServerEdit_ = nullptr;
-	QLineEdit *streamKeyEdit_ = nullptr;
-	QPushButton *showKeyButton_ = nullptr;
-	QPushButton *applyStreamButton_ = nullptr;
-	QCheckBox *ignoreRecommendedCheck_ = nullptr;
-	QLabel *recommendationsLabel_ = nullptr;
-	QLabel *streamSettingsNoticeLabel_ = nullptr;
 
-	/* Suppresses combo signals while the service/server lists are rebuilt. */
-	bool updatingServiceLists_ = false;
 
 	QPushButton *egressStartButton_ = nullptr;
 	QPushButton *egressStopButton_ = nullptr;
 	QLabel *egressStatusLabel_ = nullptr;
 
-	QCheckBox *youtubeCheck_ = nullptr;
-	QLineEdit *youtubeLiveTokenEdit_ = nullptr;
-	QCheckBox *facebookCheck_ = nullptr;
-	QLineEdit *facebookLiveTokenEdit_ = nullptr;
+	/* One row per destination. A room may carry several YouTube and several
+	 * Facebook endpoints, so this is a list rather than one row per platform. */
+	QTableWidget *destinationsTable_ = nullptr;
+	QLabel *destinationsNoticeLabel_ = nullptr;
+	QPushButton *pushDestinationsButton_ = nullptr;
+
+	/* Server ids of rows the operator removed, deleted on the next save. */
+	QStringList removedTargetIds_ = {};
+
+	QWidget *BuildDestinationsGroup();
+	void AddDestinationRow(const NvsStreamTarget &target);
+	void RemoveDestinationRow(int row);
+
+	/* Clears OBS's global audio capture: NVS forwards room audio only. */
+	void EnforceAudioPolicy();
+
+	/* Encodes once and pushes to every enabled destination. OBS's own single
+	 * streaming output cannot reach more than one. */
+	NvsMultiRtmp *multiRtmp_ = nullptr;
+	QList<NvsRtmpDestination> EnabledRtmpDestinations() const;
+
+	/* Server-side targets for the selected room, keyed by platform_type. */
+	NvsStreamTargetClient *targetClient_ = nullptr;
+	QList<NvsStreamTarget> serverTargets_ = {};
+
+	QString TargetIdFor(const QString &platformType) const;
 
 	/* Suppresses the combo box signal while the list is repopulated from OBS,
 	 * so refreshing the UI cannot trigger a scene change. */

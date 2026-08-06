@@ -1,4 +1,4 @@
-/******************************************************************************
+﻿/******************************************************************************
     Copyright (C) 2026 by Aslam Iqbal
 
     This program is free software: you can redistribute it and/or modify
@@ -33,8 +33,6 @@
 #endif
 
 namespace {
-
-constexpr const char *CREDENTIAL_FILE_NAME = "nvs-credentials.bin";
 
 /* Bound to the sealed blob so a file from another install cannot be swapped in
  * and silently decrypted. */
@@ -106,16 +104,16 @@ bool NvsCredentialStore::IsEncryptionAvailable()
 #endif
 }
 
-QString NvsCredentialStore::FilePath()
+QString NvsCredentialStore::FilePath(const char *fileName)
 {
-	BPtr<char> path = obs_module_get_config_path(obs_current_module(), CREDENTIAL_FILE_NAME);
+	BPtr<char> path = obs_module_get_config_path(obs_current_module(), fileName);
 
 	const char *raw = path;
 
 	return raw ? QString::fromUtf8(raw) : QString();
 }
 
-bool NvsCredentialStore::Save(const QJsonObject &credentials)
+bool NvsCredentialStore::Save(const QJsonObject &credentials, const char *fileName)
 {
 	if (!IsEncryptionAvailable()) {
 		blog(LOG_WARNING,
@@ -123,7 +121,7 @@ bool NvsCredentialStore::Save(const QJsonObject &credentials)
 		return false;
 	}
 
-	const QString path = FilePath();
+	const QString path = FilePath(fileName);
 
 	if (path.isEmpty()) {
 		return false;
@@ -167,13 +165,13 @@ bool NvsCredentialStore::Save(const QJsonObject &credentials)
 #endif
 }
 
-QJsonObject NvsCredentialStore::Load()
+QJsonObject NvsCredentialStore::Load(const char *fileName)
 {
 	if (!IsEncryptionAvailable()) {
 		return {};
 	}
 
-	const QString path = FilePath();
+	const QString path = FilePath(fileName);
 
 	if (path.isEmpty() || !QFile::exists(path)) {
 		return {};
@@ -196,7 +194,7 @@ QJsonObject NvsCredentialStore::Load()
 		/* Most often the file was copied from another machine or user. It is
 		 * useless here, so drop it and fall back to a fresh sign-in. */
 		blog(LOG_WARNING, "[nvs] stored credentials could not be decrypted; clearing them");
-		Clear();
+		Clear(fileName);
 		return {};
 	}
 
@@ -209,9 +207,9 @@ QJsonObject NvsCredentialStore::Load()
 #endif
 }
 
-void NvsCredentialStore::Clear()
+void NvsCredentialStore::Clear(const char *fileName)
 {
-	const QString path = FilePath();
+	const QString path = FilePath(fileName);
 
 	if (!path.isEmpty() && QFile::exists(path)) {
 		QFile::remove(path);

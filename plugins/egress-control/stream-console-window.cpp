@@ -1,4 +1,4 @@
-/******************************************************************************
+﻿/******************************************************************************
     Copyright (C) 2026 by Aslam Iqbal
 
     This program is free software: you can redistribute it and/or modify
@@ -33,12 +33,26 @@
 #include <QLineEdit>
 #include <QMessageBox>
 #include <QPushButton>
+#include <QEvent>
+#include <QScrollArea>
+#include <QWheelEvent>
+#include <QDesktopServices>
+#include <QHeaderView>
+#include <QPair>
 #include <QStringList>
+#include <QTableWidget>
 #include <QVBoxLayout>
 
+#include <QJsonObject>
+#include <QSignalBlocker>
+
+#include "egress-config.hpp"
 #include "egress-controller.hpp"
 #include "egress-state.hpp"
+#include "nvs-credential-store.hpp"
 #include "nvs-identity.hpp"
+#include "nvs-multi-rtmp.hpp"
+#include "nvs-room-client.hpp"
 #include "nvs-startup.hpp"
 #include "program-preview-widget.hpp"
 
@@ -49,6 +63,39 @@ namespace {
 constexpr const char *COMMON_SERVICE_ID = "rtmp_common";
 constexpr const char *CUSTOM_SERVICE_ID = "rtmp_custom";
 
+/* Stops a combo box from swallowing wheel events it does not own.
+ *
+ * These live inside a scroll area, and by default scrolling the page while the
+ * pointer happens to be over a combo silently changes the selection instead of
+ * scrolling — which here would mean retargeting the console at a different room
+ * or service without the operator noticing. */
+class WheelGuard : public QObject {
+public:
+	using QObject::QObject;
+
+protected:
+	bool eventFilter(QObject *watched, QEvent *event) override
+	{
+		if (event->type() == QEvent::Wheel) {
+			QWidget *widget = qobject_cast<QWidget *>(watched);
+
+			/* Deliberate interaction still works: click it first. */
+			if (widget && !widget->hasFocus()) {
+				event->ignore();
+				return true;
+			}
+		}
+
+		return QObject::eventFilter(watched, event);
+	}
+};
+
+void GuardWheel(QComboBox *combo, QObject *owner)
+{
+	combo->setFocusPolicy(Qt::StrongFocus);
+	combo->installEventFilter(new WheelGuard(owner));
+}
+
 } // namespace
 
 StreamConsoleWindow::StreamConsoleWindow(EgressController *controller, NvsIdentity *identity, QWidget *parent)
@@ -58,25 +105,32 @@ StreamConsoleWindow::StreamConsoleWindow(EgressController *controller, NvsIdenti
 {
 	setObjectName("streamConsoleWindow");
 	setWindowTitle(obs_module_text("StreamConsole"));
-	resize(960, 640);
+	resize(980, 720);
+
+	/* Created before the layout: the group builders connect to these. */
+	const QString apiBaseUrl = EgressConfig::Load().baseUrl;
+	roomClient_ = new NvsRoomClient(apiBaseUrl, identity_, this);
+	targetClient_ = new NvsStreamTargetClient(apiBaseUrl, identity_, this);
+	multiRtmp_ = new NvsMultiRtmp(this);
 
 	QVBoxLayout *mainLayout = new QVBoxLayout(this);
 
 	preview_ = new ProgramPreviewWidget(this);
-	mainLayout->addWidget(preview_, 1);
+	/* Weighted above the scrolled config so the picture stays the focus. */
+	mainLayout->addWidget(preview_, 3);
 
 	QFrame *separator = new QFrame(this);
 	separator->setFrameShape(QFrame::HLine);
 	separator->setFrameShadow(QFrame::Sunken);
 	mainLayout->addWidget(separator);
 
-	/* Row 1: live controls — what an operator touches mid-broadcast. */
+	/* Row 1: scene selection. */
 	QHBoxLayout *streamRow = new QHBoxLayout();
 
 	sceneSelector_ = new QComboBox(this);
 	sceneSelector_->setMinimumWidth(160);
+	GuardWheel(sceneSelector_, this);
 
-	streamButton_ = new QPushButton(this);
 	streamStatusLabel_ = new QLabel(this);
 
 	QFont statusFont = streamStatusLabel_->font();
@@ -86,7 +140,6 @@ StreamConsoleWindow::StreamConsoleWindow(EgressController *controller, NvsIdenti
 	streamRow->addWidget(new QLabel(obs_module_text("Scene"), this));
 	streamRow->addWidget(sceneSelector_);
 	streamRow->addSpacing(12);
-	streamRow->addWidget(streamButton_);
 	streamRow->addSpacing(12);
 	streamRow->addWidget(streamStatusLabel_);
 	streamRow->addStretch(1);
@@ -108,31 +161,27 @@ StreamConsoleWindow::StreamConsoleWindow(EgressController *controller, NvsIdenti
 
 	mainLayout->addLayout(egressRow);
 
-	/* Configuration below the live controls: set once, rarely touched. */
-	mainLayout->addWidget(BuildStreamGroup());
+	/* Configuration below the live controls: set once, rarely touched.
+	 *
+	 * Scrolled rather than stacked: the three groups together are taller than
+	 * a laptop screen, and without this the account row at the bottom becomes
+	 * unreachable. The preview and live controls stay fixed above it. */
+	QWidget *configWidget = new QWidget(this);
+	QVBoxLayout *configLayout = new QVBoxLayout(configWidget);
+	configLayout->setContentsMargins(0, 0, 0, 0);
 
-	QGroupBox *destinationsGroup = new QGroupBox(obs_module_text("Destinations"), this);
-	QVBoxLayout *destinationsLayout = new QVBoxLayout(destinationsGroup);
+	configLayout->addWidget(BuildRoomGroup());
 
-	QHBoxLayout *youtubeRow = new QHBoxLayout();
-	youtubeCheck_ = new QCheckBox("Youtube", this);
-	youtubeCheck_->setMinimumWidth(100);
-	youtubeLiveTokenEdit_ = new QLineEdit(this);
-	youtubeLiveTokenEdit_->setPlaceholderText("youtubeLiveToken");
-	youtubeRow->addWidget(youtubeCheck_);
-	youtubeRow->addWidget(youtubeLiveTokenEdit_, 1);
-	destinationsLayout->addLayout(youtubeRow);
+	configLayout->addWidget(BuildDestinationsGroup());
+	configLayout->addStretch(1);
 
-	QHBoxLayout *facebookRow = new QHBoxLayout();
-	facebookCheck_ = new QCheckBox("Facebook", this);
-	facebookCheck_->setMinimumWidth(100);
-	facebookLiveTokenEdit_ = new QLineEdit(this);
-	facebookLiveTokenEdit_->setPlaceholderText("facebookLiveToken");
-	facebookRow->addWidget(facebookCheck_);
-	facebookRow->addWidget(facebookLiveTokenEdit_, 1);
-	destinationsLayout->addLayout(facebookRow);
+	QScrollArea *configScroll = new QScrollArea(this);
+	configScroll->setWidget(configWidget);
+	configScroll->setWidgetResizable(true);
+	configScroll->setFrameShape(QFrame::NoFrame);
+	configScroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
 
-	mainLayout->addWidget(destinationsGroup);
+	mainLayout->addWidget(configScroll, 2);
 
 	/* Bottom row: account and desktop integration. */
 	QHBoxLayout *accountRow = new QHBoxLayout();
@@ -162,16 +211,19 @@ StreamConsoleWindow::StreamConsoleWindow(EgressController *controller, NvsIdenti
 		QMessageBox::warning(this, obs_module_text("SignIn"), message);
 	});
 
-	connect(streamButton_, &QPushButton::clicked, this, &StreamConsoleWindow::OnStreamButtonClicked);
 	connect(sceneSelector_, &QComboBox::currentIndexChanged, this, &StreamConsoleWindow::OnSceneSelected);
 
+	/* Start/Stop drive the real stream targets. The controller still owns the
+	 * displayed state, which the dock and tray also read. */
 	connect(egressStartButton_, &QPushButton::clicked, this, [this]() {
 		egressStartButton_->setEnabled(false);
+		OnStartDestinationsClicked();
 		controller_->Start();
 	});
 
 	connect(egressStopButton_, &QPushButton::clicked, this, [this]() {
 		egressStopButton_->setEnabled(false);
+		OnStopDestinationsClicked();
 		controller_->Stop();
 	});
 
@@ -229,364 +281,730 @@ void StreamConsoleWindow::HandleFrontendEvent(enum obs_frontend_event event)
 	}
 }
 
-QWidget *StreamConsoleWindow::BuildStreamGroup()
+QWidget *StreamConsoleWindow::BuildRoomGroup()
 {
-	QGroupBox *group = new QGroupBox(obs_module_text("StreamSettings"), this);
+	QGroupBox *group = new QGroupBox(obs_module_text("Room"), this);
 	QVBoxLayout *outer = new QVBoxLayout(group);
 
 	QFormLayout *form = new QFormLayout();
 
-	serviceCombo_ = new QComboBox(this);
-	serverCombo_ = new QComboBox(this);
+	roomSelector_ = new QComboBox(this);
+	roomSelector_->setMinimumWidth(200);
+	GuardWheel(roomSelector_, this);
+	refreshRoomsButton_ = new QPushButton(obs_module_text("Room.Refresh"), this);
 
-	customServerEdit_ = new QLineEdit(this);
-	customServerEdit_->setPlaceholderText("rtmp://");
+	QWidget *roomRow = new QWidget(this);
+	QHBoxLayout *roomLayout = new QHBoxLayout(roomRow);
+	roomLayout->setContentsMargins(0, 0, 0, 0);
+	roomLayout->addWidget(roomSelector_, 1);
+	roomLayout->addWidget(refreshRoomsButton_);
 
-	/* One row holds either the preset server list or a free-text URL; only the
-	 * one that applies to the selected service is visible. */
-	QWidget *serverRow = new QWidget(this);
-	QHBoxLayout *serverLayout = new QHBoxLayout(serverRow);
-	serverLayout->setContentsMargins(0, 0, 0, 0);
-	serverLayout->addWidget(serverCombo_, 1);
-	serverLayout->addWidget(customServerEdit_, 1);
+	roomAddressEdit_ = new QLineEdit(this);
+	roomAddressEdit_->setPlaceholderText("https://nadavox.com/rooms/<code>/participant?egress=true");
+	fetchJoinUrlButton_ = new QPushButton(obs_module_text("Room.Fetch"), this);
 
-	streamKeyEdit_ = new QLineEdit(this);
-	streamKeyEdit_->setEchoMode(QLineEdit::Password);
+	QWidget *addressRow = new QWidget(this);
+	QHBoxLayout *addressLayout = new QHBoxLayout(addressRow);
+	addressLayout->setContentsMargins(0, 0, 0, 0);
+	addressLayout->addWidget(roomAddressEdit_, 1);
+	addressLayout->addWidget(fetchJoinUrlButton_);
 
-	showKeyButton_ = new QPushButton(obs_module_text("StreamSettings.Show"), this);
-	showKeyButton_->setCheckable(true);
+	roomTokenEdit_ = new QLineEdit(this);
+	/* The join token grants view access to the room until it expires, so it is
+	 * masked like every other credential on this form. */
+	roomTokenEdit_->setEchoMode(QLineEdit::Password);
+	roomTokenEdit_->setPlaceholderText(obs_module_text("Room.TokenPlaceholder"));
 
-	QWidget *keyRow = new QWidget(this);
-	QHBoxLayout *keyLayout = new QHBoxLayout(keyRow);
-	keyLayout->setContentsMargins(0, 0, 0, 0);
-	keyLayout->addWidget(streamKeyEdit_, 1);
-	keyLayout->addWidget(showKeyButton_);
-
-	form->addRow(obs_module_text("StreamSettings.Service"), serviceCombo_);
-	form->addRow(obs_module_text("StreamSettings.Server"), serverRow);
-	form->addRow(obs_module_text("StreamSettings.StreamKey"), keyRow);
+	form->addRow(obs_module_text("Room.Room"), roomRow);
+	form->addRow(obs_module_text("Room.Address"), addressRow);
+	form->addRow(obs_module_text("Room.Token"), roomTokenEdit_);
 
 	outer->addLayout(form);
 
-	ignoreRecommendedCheck_ = new QCheckBox(obs_module_text("StreamSettings.IgnoreRecommended"), this);
-	applyStreamButton_ = new QPushButton(obs_module_text("StreamSettings.Apply"), this);
+	applyRoomButton_ = new QPushButton(obs_module_text("Room.ApplyToBrowserSource"), this);
 
 	QHBoxLayout *actionRow = new QHBoxLayout();
-	actionRow->addWidget(ignoreRecommendedCheck_);
 	actionRow->addStretch(1);
-	actionRow->addWidget(applyStreamButton_);
+	actionRow->addWidget(applyRoomButton_);
 	outer->addLayout(actionRow);
 
-	recommendationsLabel_ = new QLabel(this);
-	recommendationsLabel_->setWordWrap(true);
-	recommendationsLabel_->setStyleSheet("opacity: 0.7;");
-	outer->addWidget(recommendationsLabel_);
+	roomNoticeLabel_ = new QLabel(this);
+	roomNoticeLabel_->setWordWrap(true);
+	outer->addWidget(roomNoticeLabel_);
 
-	streamSettingsNoticeLabel_ = new QLabel(this);
-	streamSettingsNoticeLabel_->setWordWrap(true);
-	outer->addWidget(streamSettingsNoticeLabel_);
+	connect(refreshRoomsButton_, &QPushButton::clicked, this, &StreamConsoleWindow::OnRefreshRoomsClicked);
+	connect(fetchJoinUrlButton_, &QPushButton::clicked, this, &StreamConsoleWindow::OnFetchJoinUrlClicked);
+	connect(applyRoomButton_, &QPushButton::clicked, this, &StreamConsoleWindow::OnApplyRoomToBrowserSource);
 
-	connect(serviceCombo_, &QComboBox::currentIndexChanged, this, &StreamConsoleWindow::OnServiceSelected);
-	connect(showKeyButton_, &QPushButton::clicked, this, &StreamConsoleWindow::OnToggleKeyVisibility);
-	connect(applyStreamButton_, &QPushButton::clicked, this, &StreamConsoleWindow::OnApplyStreamSettings);
+	connect(roomSelector_, &QComboBox::currentIndexChanged, this, [this](int) {
+		SaveRoomSettings();
+		/* Destinations belong to a room, so switching rooms reloads them
+		 * rather than leaving the previous room's targets on screen. */
+		serverTargets_.clear();
+		targetClient_->FetchTargets(SelectedRoomId());
+	});
+	connect(roomAddressEdit_, &QLineEdit::editingFinished, this, [this]() { SaveRoomSettings(); });
+	connect(roomTokenEdit_, &QLineEdit::editingFinished, this, [this]() { SaveRoomSettings(); });
 
-	/* The lists are NOT filled here. This runs during obs_module_load(), and
-	 * modules load alphabetically — egress-control before rtmp-services — so
-	 * "rtmp_common" is not registered yet and every list would come back
-	 * empty. InitStreamSettings() does it once loading has finished. */
+	connect(roomClient_, &NvsRoomClient::RoomsFetched, this, &StreamConsoleWindow::OnRoomsFetched);
+	connect(roomClient_, &NvsRoomClient::JoinUrlFetched, this, &StreamConsoleWindow::OnJoinUrlFetched);
+	connect(roomClient_, &NvsRoomClient::Failed, this,
+		[this](const QString &message) { roomNoticeLabel_->setText(message); });
+
+	LoadRoomSettings();
 
 	return group;
 }
 
-void StreamConsoleWindow::InitStreamSettings()
+QString StreamConsoleWindow::SelectedRoomId() const
 {
-	PopulateServices();
-	LoadCurrentService();
+	return roomSelector_->currentData().toString();
 }
 
-bool StreamConsoleWindow::IsCustomServiceSelected() const
+void StreamConsoleWindow::OnRefreshRoomsClicked()
 {
-	return serviceCombo_->currentData().toString() == QLatin1String(CUSTOM_SERVICE_ID);
+	roomNoticeLabel_->setText(obs_module_text("Room.Loading"));
+	roomClient_->FetchRooms();
 }
 
-void StreamConsoleWindow::PopulateServices()
+void StreamConsoleWindow::OnRoomsFetched(const QList<NvsRoomInfo> &rooms)
 {
-	updatingServiceLists_ = true;
+	/* Remember the current pick so refreshing does not silently retarget the
+	 * console at a different room. */
+	const QString previous = SelectedRoomId();
 
-	serviceCombo_->clear();
+	const QSignalBlocker blocker(roomSelector_);
+	roomSelector_->clear();
 
-	/* rtmp_common builds its service list inside the "show_all" modified
-	 * callback, not in its properties constructor, so the list stays empty
-	 * until that callback is fired. This mirrors what the OBS settings page
-	 * does — anything else yields an empty dropdown. */
+	for (const NvsRoomInfo &room : rooms) {
+		const QString label = room.code.isEmpty() ? room.name : room.name + "  (" + room.code + ")";
+		roomSelector_->addItem(label, room.id);
+	}
+
+	const int index = roomSelector_->findData(previous);
+
+	if (index >= 0) {
+		roomSelector_->setCurrentIndex(index);
+	}
+
+	roomNoticeLabel_->setText(rooms.isEmpty() ? obs_module_text("Room.None") : QString());
+
+	SaveRoomSettings();
+}
+
+void StreamConsoleWindow::OnFetchJoinUrlClicked()
+{
+	const QString roomId = SelectedRoomId();
+
+	if (roomId.isEmpty()) {
+		roomNoticeLabel_->setText(obs_module_text("Room.SelectFirst"));
+		return;
+	}
+
+	roomNoticeLabel_->setText(obs_module_text("Room.Fetching"));
+	roomClient_->FetchJoinUrl(roomId);
+}
+
+void StreamConsoleWindow::OnJoinUrlFetched(const QString &address, const QString &token)
+{
+	const QSignalBlocker blockAddress(roomAddressEdit_);
+	const QSignalBlocker blockToken(roomTokenEdit_);
+
+	roomAddressEdit_->setText(address);
+	roomTokenEdit_->setText(token);
+
+	SaveRoomSettings();
+
+	roomNoticeLabel_->setText(obs_module_text("Room.Fetched"));
+}
+
+void StreamConsoleWindow::OnApplyRoomToBrowserSource()
+{
+	const QString url = NvsRoomClient::Compose(roomAddressEdit_->text(), roomTokenEdit_->text());
+
+	if (url.isEmpty()) {
+		roomNoticeLabel_->setText(obs_module_text("Room.AddressRequired"));
+		return;
+	}
+
+	OBSSourceAutoRelease sceneSource = obs_frontend_get_current_scene();
+	obs_scene_t *scene = sceneSource ? obs_scene_from_source(sceneSource) : nullptr;
+
+	if (!scene) {
+		roomNoticeLabel_->setText(obs_module_text("Room.NoBrowserSource"));
+		return;
+	}
+
+	/* Applied to the first browser source in the current scene. Carrying the
+	 * item out of the enumeration would need a reference, so the update is
+	 * done inside the callback and the result reported afterwards. */
+	struct ApplyContext {
+		QByteArray url;
+		bool applied = false;
+		QString sourceName;
+	} context;
+
+	context.url = url.toUtf8();
+
+	auto applyToItem = [](obs_scene_t *, obs_sceneitem_t *item, void *param) -> bool {
+		ApplyContext *ctx = static_cast<ApplyContext *>(param);
+		obs_source_t *source = obs_sceneitem_get_source(item);
+		const char *id = source ? obs_source_get_id(source) : nullptr;
+
+		if (!id || strcmp(id, "browser_source") != 0) {
+			return true;
+		}
+
+		OBSDataAutoRelease settings = obs_data_create();
+		obs_data_set_string(settings, "url", ctx->url.constData());
+		obs_source_update(source, settings);
+
+		ctx->applied = true;
+		ctx->sourceName = QString::fromUtf8(obs_source_get_name(source));
+
+		/* First one wins; a scene with several browser sources would
+		 * otherwise all get pointed at the same room. */
+		return false;
+	};
+
+	obs_scene_enum_items(scene, applyToItem, &context);
+
+	if (!context.applied) {
+		roomNoticeLabel_->setText(obs_module_text("Room.NoBrowserSource"));
+		return;
+	}
+
+	/* The URL embeds the join token, so only the source name is logged. */
+	blog(LOG_INFO, "[nvs] applied the room address to browser source '%s'",
+	     context.sourceName.toUtf8().constData());
+
+	roomNoticeLabel_->setText(
+		QString::fromUtf8(obs_module_text("Room.Applied")).arg(context.sourceName));
+}
+
+void StreamConsoleWindow::LoadRoomSettings()
+{
+	const QJsonObject stored = NvsCredentialStore::Load(NvsCredentialStore::RoomFile);
+
+	const QSignalBlocker blockSelector(roomSelector_);
+	const QSignalBlocker blockAddress(roomAddressEdit_);
+	const QSignalBlocker blockToken(roomTokenEdit_);
+
+	const QString roomId = stored.value("room_id").toString();
+	const QString roomLabel = stored.value("room_label").toString();
+
+	/* The list is only available once signed in, so the remembered room is
+	 * seeded as a single entry and replaced by the real list on refresh. */
+	if (!roomId.isEmpty()) {
+		roomSelector_->addItem(roomLabel.isEmpty() ? roomId : roomLabel, roomId);
+	}
+
+	roomAddressEdit_->setText(stored.value("address").toString());
+	roomTokenEdit_->setText(stored.value("token").toString());
+}
+
+void StreamConsoleWindow::SaveRoomSettings() const
+{
+	QJsonObject payload;
+	payload.insert("room_id", roomSelector_->currentData().toString());
+	payload.insert("room_label", roomSelector_->currentText());
+	payload.insert("address", roomAddressEdit_->text().trimmed());
+	payload.insert("token", roomTokenEdit_->text().trimmed());
+
+	/* Sealed: the token is a live view credential for the room. */
+	NvsCredentialStore::Save(payload, NvsCredentialStore::RoomFile);
+}
+namespace {
+
+/* Destination table columns. */
+enum DestinationColumn {
+	ColumnEnabled = 0,
+	ColumnService = 1,
+	ColumnServer = 2,
+	ColumnKey = 3,
+	ColumnRemove = 4,
+};
+
+constexpr const char *CUSTOM_SERVICE_LABEL = "Custom...";
+
+/* Every service rtmp_common knows about, plus Custom.
+ *
+ * The list is built by a modified-callback rather than by the properties
+ * constructor, so it stays empty unless that callback is fired â€” the same
+ * mechanism the OBS settings page uses. */
+QStringList ServiceNames()
+{
+	QStringList names;
+
 	OBSProperties props = obs_get_service_properties(COMMON_SERVICE_ID);
 
 	if (props) {
 		OBSDataAutoRelease settings = obs_data_create();
 		obs_data_set_bool(settings, "show_all", false);
 
-		obs_property_t *showAll = obs_properties_get(props, "show_all");
-
-		if (showAll) {
+		if (obs_property_t *showAll = obs_properties_get(props, "show_all")) {
 			obs_property_modified(showAll, settings);
 		}
 
-		obs_property_t *serviceProp = obs_properties_get(props, "service");
-
-		if (serviceProp) {
-			const size_t count = obs_property_list_item_count(serviceProp);
+		if (obs_property_t *service = obs_properties_get(props, "service")) {
+			const size_t count = obs_property_list_item_count(service);
 
 			for (size_t i = 0; i < count; i++) {
-				const char *name = obs_property_list_item_string(serviceProp, i);
+				const char *name = obs_property_list_item_string(service, i);
 
 				if (name && *name) {
-					serviceCombo_->addItem(QString::fromUtf8(name),
-							       QLatin1String(COMMON_SERVICE_ID));
+					names << QString::fromUtf8(name);
 				}
 			}
 		}
 	}
 
-	/* Custom RTMP is a different service type, not an entry in that list. */
-	serviceCombo_->addItem(obs_module_text("StreamSettings.Custom"), QLatin1String(CUSTOM_SERVICE_ID));
+	names << QLatin1String(CUSTOM_SERVICE_LABEL);
 
-	updatingServiceLists_ = false;
+	return names;
 }
 
-void StreamConsoleWindow::PopulateServersFor(const QString &serviceName)
+/* Ingest servers for one service, as (label, url) pairs. */
+QList<QPair<QString, QString>> ServersFor(const QString &serviceName)
 {
-	updatingServiceLists_ = true;
+	QList<QPair<QString, QString>> servers;
 
-	serverCombo_->clear();
-
-	/* Servers are filled by the "service" modified callback, keyed on the
-	 * selected service name. */
 	OBSProperties props = obs_get_service_properties(COMMON_SERVICE_ID);
 
-	if (props) {
-		OBSDataAutoRelease settings = obs_data_create();
-		obs_data_set_string(settings, "service", serviceName.toUtf8().constData());
+	if (!props) {
+		return servers;
+	}
 
-		obs_property_t *serviceProp = obs_properties_get(props, "service");
+	OBSDataAutoRelease settings = obs_data_create();
+	obs_data_set_string(settings, "service", serviceName.toUtf8().constData());
 
-		if (serviceProp) {
-			obs_property_modified(serviceProp, settings);
-		}
+	if (obs_property_t *service = obs_properties_get(props, "service")) {
+		obs_property_modified(service, settings);
+	}
 
-		obs_property_t *serverProp = obs_properties_get(props, "server");
+	if (obs_property_t *server = obs_properties_get(props, "server")) {
+		const size_t count = obs_property_list_item_count(server);
 
-		if (serverProp) {
-			const size_t count = obs_property_list_item_count(serverProp);
+		for (size_t i = 0; i < count; i++) {
+			const char *label = obs_property_list_item_name(server, i);
+			const char *url = obs_property_list_item_string(server, i);
 
-			for (size_t i = 0; i < count; i++) {
-				const char *name = obs_property_list_item_name(serverProp, i);
-				const char *url = obs_property_list_item_string(serverProp, i);
-
-				if (url && *url) {
-					serverCombo_->addItem(QString::fromUtf8(name ? name : url),
-							      QString::fromUtf8(url));
-				}
+			if (url && *url) {
+				servers.append({QString::fromUtf8(label ? label : url), QString::fromUtf8(url)});
 			}
 		}
 	}
 
-	updatingServiceLists_ = false;
+	return servers;
 }
 
-void StreamConsoleWindow::LoadCurrentService()
+/* Where this service tells an operator to fetch their key. Empty for services
+ * that publish none â€” YouTube among them, which is why the button is hidden
+ * rather than pointed somewhere generic. */
+QString StreamKeyLinkFor(const QString &serviceName)
 {
-	OBSService service = obs_frontend_get_streaming_service();
+	OBSProperties props = obs_get_service_properties(COMMON_SERVICE_ID);
 
-	if (!service) {
-		return;
+	if (!props) {
+		return {};
 	}
 
-	const char *type = obs_service_get_type(service);
-	OBSDataAutoRelease settings = obs_service_get_settings(service);
+	OBSDataAutoRelease settings = obs_data_create();
+	obs_data_set_string(settings, "service", serviceName.toUtf8().constData());
 
-	updatingServiceLists_ = true;
+	if (obs_property_t *service = obs_properties_get(props, "service")) {
+		obs_property_modified(service, settings);
+	}
 
-	if (type && strcmp(type, CUSTOM_SERVICE_ID) == 0) {
-		const int index = serviceCombo_->findData(QLatin1String(CUSTOM_SERVICE_ID));
-		serviceCombo_->setCurrentIndex(index >= 0 ? index : serviceCombo_->count() - 1);
-		customServerEdit_->setText(QString::fromUtf8(obs_data_get_string(settings, "server")));
-	} else {
-		const QString serviceName = QString::fromUtf8(obs_data_get_string(settings, "service"));
-		const int index = serviceCombo_->findText(serviceName);
+	return QString::fromUtf8(obs_data_get_string(settings, "stream_key_link"));
+}
 
-		if (index >= 0) {
-			serviceCombo_->setCurrentIndex(index);
+} // namespace
+
+QWidget *StreamConsoleWindow::BuildDestinationsGroup()
+{
+	QGroupBox *group = new QGroupBox(obs_module_text("Destinations"), this);
+	QVBoxLayout *outer = new QVBoxLayout(group);
+
+	/* A room may broadcast to several endpoints on the same platform, so this
+	 * is a list and every row carries its own service, server and key. */
+	destinationsTable_ = new QTableWidget(0, 5, this);
+	destinationsTable_->setHorizontalHeaderLabels(
+		{obs_module_text("Destinations.On"), obs_module_text("Destinations.Service"),
+		 obs_module_text("Destinations.Server"), obs_module_text("Destinations.Token"), QString()});
+
+	destinationsTable_->verticalHeader()->setVisible(false);
+	destinationsTable_->setSelectionMode(QAbstractItemView::NoSelection);
+	destinationsTable_->setEditTriggers(QAbstractItemView::NoEditTriggers);
+	destinationsTable_->horizontalHeader()->setSectionResizeMode(ColumnServer, QHeaderView::Stretch);
+	destinationsTable_->horizontalHeader()->setSectionResizeMode(ColumnKey, QHeaderView::Stretch);
+	destinationsTable_->setColumnWidth(ColumnEnabled, 40);
+	destinationsTable_->setColumnWidth(ColumnService, 150);
+	destinationsTable_->setColumnWidth(ColumnRemove, 34);
+	destinationsTable_->setMinimumHeight(150);
+	destinationsTable_->verticalHeader()->setDefaultSectionSize(32);
+
+	outer->addWidget(destinationsTable_);
+
+	QPushButton *addButton = new QPushButton(obs_module_text("Destinations.Add"), this);
+	pushDestinationsButton_ = new QPushButton(obs_module_text("Destinations.Push"), this);
+
+	QHBoxLayout *actionRow = new QHBoxLayout();
+	actionRow->addWidget(addButton);
+	actionRow->addStretch(1);
+	actionRow->addWidget(pushDestinationsButton_);
+	outer->addLayout(actionRow);
+
+	destinationsNoticeLabel_ = new QLabel(this);
+	destinationsNoticeLabel_->setWordWrap(true);
+	outer->addWidget(destinationsNoticeLabel_);
+
+	connect(addButton, &QPushButton::clicked, this, [this]() { AddDestinationRow(NvsStreamTarget()); });
+
+	connect(pushDestinationsButton_, &QPushButton::clicked, this,
+		&StreamConsoleWindow::OnPushDestinationsClicked);
+
+	connect(targetClient_, &NvsStreamTargetClient::TargetsFetched, this,
+		&StreamConsoleWindow::OnTargetsFetched);
+
+	connect(targetClient_, &NvsStreamTargetClient::TargetSaved, this, [this](const QString &platform) {
+		destinationsNoticeLabel_->setText(
+			QString::fromUtf8(obs_module_text("Targets.Saved")).arg(platform));
+		targetClient_->FetchTargets(SelectedRoomId());
+	});
+
+	connect(targetClient_, &NvsStreamTargetClient::TargetDeleted, this,
+		[this](const QString &) { targetClient_->FetchTargets(SelectedRoomId()); });
+
+	connect(targetClient_, &NvsStreamTargetClient::Failed, this,
+		[this](const QString &message) { destinationsNoticeLabel_->setText(message); });
+
+	return group;
+}
+
+void StreamConsoleWindow::AddDestinationRow(const NvsStreamTarget &target)
+{
+	const int row = destinationsTable_->rowCount();
+	destinationsTable_->insertRow(row);
+
+	QTableWidgetItem *enabled = new QTableWidgetItem();
+	enabled->setFlags(Qt::ItemIsUserCheckable | Qt::ItemIsEnabled);
+	enabled->setCheckState(target.enabled ? Qt::Checked : Qt::Unchecked);
+	/* The server id rides on the row so a save knows create from update. */
+	enabled->setData(Qt::UserRole, target.id);
+	destinationsTable_->setItem(row, ColumnEnabled, enabled);
+
+	QComboBox *service = new QComboBox(this);
+	service->addItems(ServiceNames());
+	GuardWheel(service, this);
+	destinationsTable_->setCellWidget(row, ColumnService, service);
+
+	/* Editable so "Custom..." can take a hand-typed endpoint in the same cell
+	 * a preset would use a list for. */
+	QComboBox *server = new QComboBox(this);
+	server->setEditable(true);
+	GuardWheel(server, this);
+	destinationsTable_->setCellWidget(row, ColumnServer, server);
+
+	QWidget *keyCell = new QWidget(this);
+	QHBoxLayout *keyLayout = new QHBoxLayout(keyCell);
+	keyLayout->setContentsMargins(0, 0, 0, 0);
+	keyLayout->setSpacing(4);
+
+	QLineEdit *key = new QLineEdit(this);
+	key->setEchoMode(QLineEdit::Password);
+	key->setPlaceholderText(target.id.isEmpty() ? obs_module_text("Destinations.TokenNew")
+						    : obs_module_text("Destinations.TokenKeep"));
+
+	QPushButton *show = new QPushButton(obs_module_text("StreamSettings.Show"), this);
+	show->setCheckable(true);
+	show->setFixedWidth(52);
+
+	QPushButton *getKey = new QPushButton(obs_module_text("Destinations.GetStreamKey"), this);
+	getKey->setFixedWidth(110);
+
+	keyLayout->addWidget(key, 1);
+	keyLayout->addWidget(show);
+	keyLayout->addWidget(getKey);
+
+	destinationsTable_->setCellWidget(row, ColumnKey, keyCell);
+
+	QPushButton *remove = new QPushButton(QStringLiteral("\xE2\x9C\x95"), this);
+	remove->setFlat(true);
+	remove->setToolTip(obs_module_text("Destinations.Remove"));
+	destinationsTable_->setCellWidget(row, ColumnRemove, remove);
+
+	connect(show, &QPushButton::clicked, this, [key, show]() {
+		const bool visible = show->isChecked();
+		key->setEchoMode(visible ? QLineEdit::Normal : QLineEdit::Password);
+		show->setText(obs_module_text(visible ? "StreamSettings.Hide" : "StreamSettings.Show"));
+	});
+
+	/* Repopulating the servers and re-targeting the key link are the same
+	 * event, so they are handled together. */
+	auto onServiceChanged = [this, service, server, getKey]() {
+		const QString name = service->currentText();
+		const bool custom = name == QLatin1String(CUSTOM_SERVICE_LABEL);
+
+		const QSignalBlocker blocker(server);
+		const QString previous = server->currentText();
+
+		server->clear();
+
+		if (!custom) {
+			for (const QPair<QString, QString> &entry : ServersFor(name)) {
+				server->addItem(entry.first, entry.second);
+			}
+		} else {
+			server->setEditText(previous);
 		}
 
-		PopulateServersFor(serviceName);
+		/* Only some services publish a page to fetch a key from; YouTube
+		 * does not, so the button is hidden rather than left dead. */
+		const QString link = custom ? QString() : StreamKeyLinkFor(name);
 
-		const QString server = QString::fromUtf8(obs_data_get_string(settings, "server"));
-		const int serverIndex = serverCombo_->findData(server);
+		getKey->setVisible(!link.isEmpty());
+		getKey->setProperty("nvsKeyLink", link);
+	};
+
+	connect(service, &QComboBox::currentTextChanged, this, [onServiceChanged]() { onServiceChanged(); });
+
+	connect(getKey, &QPushButton::clicked, this, [getKey]() {
+		const QString link = getKey->property("nvsKeyLink").toString();
+
+		if (!link.isEmpty()) {
+			QDesktopServices::openUrl(QUrl(link));
+		}
+	});
+
+	connect(remove, &QPushButton::clicked, this, [this, remove]() {
+		/* The row index shifts as rows are removed, so it is resolved from
+		 * the button that was actually clicked. */
+		for (int i = 0; i < destinationsTable_->rowCount(); i++) {
+			if (destinationsTable_->cellWidget(i, ColumnRemove) == remove) {
+				RemoveDestinationRow(i);
+				return;
+			}
+		}
+	});
+
+	/* Restore the saved service, or default to the first entry. */
+	const int serviceIndex = service->findText(target.platformType);
+	service->setCurrentIndex(serviceIndex >= 0 ? serviceIndex : 0);
+
+	onServiceChanged();
+
+	if (!target.url.isEmpty()) {
+		const int serverIndex = server->findData(target.url);
 
 		if (serverIndex >= 0) {
-			serverCombo_->setCurrentIndex(serverIndex);
+			server->setCurrentIndex(serverIndex);
+		} else {
+			server->setEditText(target.url);
 		}
 	}
+}
 
-	streamKeyEdit_->setText(QString::fromUtf8(obs_data_get_string(settings, "key")));
+void StreamConsoleWindow::RemoveDestinationRow(int row)
+{
+	QTableWidgetItem *enabled = destinationsTable_->item(row, ColumnEnabled);
+	const QString targetId = enabled ? enabled->data(Qt::UserRole).toString() : QString();
 
-	config_t *profile = obs_frontend_get_profile_config();
-
-	if (profile) {
-		ignoreRecommendedCheck_->setChecked(config_get_bool(profile, "Stream1", "IgnoreRecommended"));
+	/* Deleted on the next save rather than immediately, so removing a row is
+	 * undoable by simply not saving. */
+	if (!targetId.isEmpty()) {
+		removedTargetIds_ << targetId;
 	}
 
-	updatingServiceLists_ = false;
-
-	ApplyServerRowMode();
-	RefreshRecommendations();
+	destinationsTable_->removeRow(row);
 }
 
-/* A preset service picks its server from a list; a custom endpoint is typed in.
- * Only the control that applies is shown, so the row never offers both. */
-void StreamConsoleWindow::ApplyServerRowMode()
+void StreamConsoleWindow::OnTargetsFetched(const QList<NvsStreamTarget> &targets)
 {
-	const bool custom = IsCustomServiceSelected();
+	serverTargets_ = targets;
+	removedTargetIds_.clear();
 
-	serverCombo_->setVisible(!custom);
-	customServerEdit_->setVisible(custom);
+	destinationsTable_->setRowCount(0);
+
+	for (const NvsStreamTarget &target : targets) {
+		AddDestinationRow(target);
+	}
+
+	destinationsNoticeLabel_->setText(
+		targets.isEmpty() ? QString::fromUtf8(obs_module_text("Targets.None")) : QString());
 }
 
-void StreamConsoleWindow::OnServiceSelected(int index)
+/* Reads one row back out of the table. Returns false for a row that is not a
+ * usable destination. */
+static bool ReadDestinationRow(QTableWidget *table, int row, QString &serviceName, QString &serverUrl,
+			       QString &key, QString &targetId, bool &enabled)
 {
-	if (updatingServiceLists_ || index < 0) {
+	QTableWidgetItem *enabledItem = table->item(row, ColumnEnabled);
+	QComboBox *service = qobject_cast<QComboBox *>(table->cellWidget(row, ColumnService));
+	QComboBox *server = qobject_cast<QComboBox *>(table->cellWidget(row, ColumnServer));
+	QWidget *keyCell = table->cellWidget(row, ColumnKey);
+	QLineEdit *keyEdit = keyCell ? keyCell->findChild<QLineEdit *>() : nullptr;
+
+	if (!enabledItem || !service || !server || !keyEdit) {
+		return false;
+	}
+
+	serviceName = service->currentText();
+	/* A preset row carries the URL as item data; a custom row is free text. */
+	serverUrl = server->currentData().isValid() ? server->currentData().toString()
+						   : server->currentText().trimmed();
+	key = keyEdit->text().trimmed();
+	targetId = enabledItem->data(Qt::UserRole).toString();
+	enabled = enabledItem->checkState() == Qt::Checked;
+
+	return true;
+}
+
+void StreamConsoleWindow::OnPushDestinationsClicked()
+{
+	const QString roomId = SelectedRoomId();
+
+	if (roomId.isEmpty()) {
+		destinationsNoticeLabel_->setText(obs_module_text("Room.SelectFirst"));
 		return;
 	}
 
-	ApplyServerRowMode();
-
-	if (!IsCustomServiceSelected()) {
-		PopulateServersFor(serviceCombo_->currentText());
+	for (const QString &removed : removedTargetIds_) {
+		targetClient_->DeleteTarget(removed);
 	}
 
-	RefreshRecommendations();
+	removedTargetIds_.clear();
+
+	int saved = 0;
+
+	for (int row = 0; row < destinationsTable_->rowCount(); row++) {
+		QString serviceName;
+		QString serverUrl;
+		QString key;
+		QString targetId;
+		bool enabled = false;
+
+		if (!ReadDestinationRow(destinationsTable_, row, serviceName, serverUrl, key, targetId, enabled)) {
+			continue;
+		}
+
+		/* A brand new row with no server is an empty form, not a destination. */
+		if (targetId.isEmpty() && serverUrl.isEmpty()) {
+			continue;
+		}
+
+		NvsStreamTarget target;
+		target.id = targetId;
+		target.platformType = serviceName;
+		target.name = serviceName;
+		target.url = serverUrl;
+		target.enabled = enabled;
+
+		targetClient_->SaveTarget(roomId, target, key);
+		saved++;
+	}
+
+	destinationsNoticeLabel_->setText(saved == 0 ? QString::fromUtf8(obs_module_text("Targets.NothingToPush"))
+						     : QString::fromUtf8(obs_module_text("Targets.Pushing")));
 }
 
-void StreamConsoleWindow::OnToggleKeyVisibility()
+QList<NvsRtmpDestination> StreamConsoleWindow::EnabledRtmpDestinations() const
 {
-	const bool visible = showKeyButton_->isChecked();
+	QList<NvsRtmpDestination> destinations;
 
-	streamKeyEdit_->setEchoMode(visible ? QLineEdit::Normal : QLineEdit::Password);
-	showKeyButton_->setText(obs_module_text(visible ? "StreamSettings.Hide" : "StreamSettings.Show"));
+	for (int row = 0; row < destinationsTable_->rowCount(); row++) {
+		QString serviceName;
+		QString serverUrl;
+		QString key;
+		QString targetId;
+		bool enabled = false;
+
+		if (!ReadDestinationRow(destinationsTable_, row, serviceName, serverUrl, key, targetId, enabled)) {
+			continue;
+		}
+
+		if (!enabled || serverUrl.isEmpty()) {
+			continue;
+		}
+
+		NvsRtmpDestination destination;
+		/* Row number keeps two endpoints on the same service distinguishable
+		 * in the log and in obs output names. */
+		destination.name = QStringLiteral("%1 %2").arg(serviceName).arg(row + 1);
+		destination.url = serverUrl;
+		destination.key = key;
+
+		destinations.append(destination);
+	}
+
+	return destinations;
 }
 
-void StreamConsoleWindow::RefreshRecommendations()
+void StreamConsoleWindow::OnStartDestinationsClicked()
 {
-	if (!recommendationsLabel_) {
+	const QList<NvsRtmpDestination> destinations = EnabledRtmpDestinations();
+
+	if (destinations.isEmpty()) {
+		destinationsNoticeLabel_->setText(obs_module_text("Targets.NoneToStart"));
 		return;
 	}
 
-	/* Built from a throwaway service matching the current selection, so the
-	 * limits shown are the ones that would actually apply. */
-	OBSDataAutoRelease settings = obs_data_create();
-	const bool custom = IsCustomServiceSelected();
+	/* NVS encodes the room and pushes it itself, so going live is local rather
+	 * than a call to the backend. The key typed into the row is used directly:
+	 * a stored server-side key cannot be read back. */
+	const int started = multiRtmp_->Start(destinations);
 
-	if (!custom) {
-		obs_data_set_string(settings, "service", serviceCombo_->currentText().toUtf8().constData());
+	if (started > 0) {
+		destinationsNoticeLabel_->setText(
+			QString::fromUtf8(obs_module_text("MultiRtmp.Live")).arg(started));
 	}
-
-	OBSServiceAutoRelease probe = obs_service_create_private(custom ? CUSTOM_SERVICE_ID : COMMON_SERVICE_ID,
-								"nvs_probe", settings);
-
-	if (!probe) {
-		recommendationsLabel_->clear();
-		return;
-	}
-
-	int videoBitrate = 0;
-	int audioBitrate = 0;
-	int fps = 0;
-
-	obs_service_get_max_bitrate(probe, &videoBitrate, &audioBitrate);
-	obs_service_get_max_fps(probe, &fps);
-
-	QStringList parts;
-
-	if (videoBitrate > 0) {
-		parts << QString::fromUtf8(obs_module_text("StreamSettings.MaxVideo")).arg(videoBitrate);
-	}
-	if (audioBitrate > 0) {
-		parts << QString::fromUtf8(obs_module_text("StreamSettings.MaxAudio")).arg(audioBitrate);
-	}
-	if (fps > 0) {
-		parts << QString::fromUtf8(obs_module_text("StreamSettings.MaxFps")).arg(fps);
-	}
-
-	/* A service with no published limits (custom RTMP) simply has nothing to
-	 * say here, which is different from the limits being zero. */
-	recommendationsLabel_->setText(parts.isEmpty() ? QString::fromUtf8(obs_module_text("StreamSettings.NoLimits"))
-						       : parts.join(QStringLiteral("  \xC2\xB7  ")));
 }
 
-void StreamConsoleWindow::OnApplyStreamSettings()
+void StreamConsoleWindow::OnStopDestinationsClicked()
 {
-	/* A running output already holds its destination; changing it now would be
-	 * silently ignored rather than applied. */
-	if (obs_frontend_streaming_active()) {
-		streamSettingsNoticeLabel_->setText(obs_module_text("StreamSettings.CannotEditWhileLive"));
+	if (!multiRtmp_->IsActive()) {
 		return;
 	}
 
-	const bool custom = IsCustomServiceSelected();
-
-	OBSDataAutoRelease settings = obs_data_create();
-
-	if (custom) {
-		obs_data_set_string(settings, "server",
-				    customServerEdit_->text().trimmed().toUtf8().constData());
-	} else {
-		obs_data_set_string(settings, "service", serviceCombo_->currentText().toUtf8().constData());
-		obs_data_set_string(settings, "server",
-				    serverCombo_->currentData().toString().toUtf8().constData());
-	}
-
-	obs_data_set_string(settings, "key", streamKeyEdit_->text().toUtf8().constData());
-
-	OBSServiceAutoRelease service = obs_service_create(custom ? CUSTOM_SERVICE_ID : COMMON_SERVICE_ID,
-							  "default_service", settings, nullptr);
-
-	if (!service) {
-		streamSettingsNoticeLabel_->setText(obs_module_text("StreamSettings.SaveFailed"));
-		return;
-	}
-
-	obs_frontend_set_streaming_service(service);
-	obs_frontend_save_streaming_service();
-
-	config_t *profile = obs_frontend_get_profile_config();
-
-	if (profile) {
-		config_set_bool(profile, "Stream1", "IgnoreRecommended", ignoreRecommendedCheck_->isChecked());
-		config_save(profile);
-	}
-
-	/* Service name and server are safe to log; the stream key never is. */
-	blog(LOG_INFO, "[nvs] stream destination updated (%s)",
-	     custom ? "custom" : serviceCombo_->currentText().toUtf8().constData());
-
-	streamSettingsNoticeLabel_->setText(obs_module_text("StreamSettings.Saved"));
-	RefreshRecommendations();
+	multiRtmp_->Stop();
+	destinationsNoticeLabel_->setText(obs_module_text("MultiRtmp.Stopped"));
 }
 
-void StreamConsoleWindow::OnStreamButtonClicked()
+/* NVS forwards the room's audio; it never captures the operator's machine.
+ *
+ * OBS ships with Desktop Audio and Mic/Aux enabled, which would put the
+ * operator's speakers and microphone into the broadcast and double-mix the room
+ * the moment they monitor it. The room's own audio arrives through the browser
+ * source, so the global capture channels are cleared. */
+void StreamConsoleWindow::EnforceAudioPolicy()
 {
-	/* Disabled until the matching frontend event arrives, so a double click
-	 * cannot issue a second start or stop. */
-	streamButton_->setEnabled(false);
+	int cleared = 0;
 
-	if (obs_frontend_streaming_active()) {
-		blog(LOG_INFO, "[egress-control] stopping OBS streaming from the console");
-		obs_frontend_streaming_stop();
-	} else {
-		blog(LOG_INFO, "[egress-control] starting OBS streaming from the console");
-		obs_frontend_streaming_start();
+	/* Channels 1-2 are Desktop Audio, 3-6 are Mic/Aux. */
+	for (uint32_t channel = 1; channel <= 6; channel++) {
+		OBSSourceAutoRelease existing = obs_get_output_source(channel);
+
+		if (!existing) {
+			continue;
+		}
+
+		obs_set_output_source(channel, nullptr);
+		cleared++;
+	}
+
+	if (cleared > 0) {
+		blog(LOG_INFO,
+		     "[nvs] disabled %d global audio capture device(s): NVS forwards room audio and captures none. "
+		     "Re-enable in OBS audio settings if this machine really should be captured.",
+		     cleared);
 	}
 }
+
+void StreamConsoleWindow::InitStreamSettings()
+{
+	EnforceAudioPolicy();
+}
+
 
 void StreamConsoleWindow::OnSceneSelected(int index)
 {
@@ -657,29 +1075,13 @@ void StreamConsoleWindow::RefreshCurrentScene()
 
 void StreamConsoleWindow::RefreshStreamingState()
 {
+	/* NVS pushes through its own multi-destination engine, so OBS's single
+	 * output is not driven from here. This still reports it, because a stream
+	 * started from the main window would push the same room a second time —
+	 * the operator should be able to see that. */
 	const bool active = obs_frontend_streaming_active();
 
-	streamButton_->setText(obs_module_text(active ? "StopStreaming" : "StartStreaming"));
-	streamButton_->setEnabled(true);
-
-	streamStatusLabel_->setText(obs_module_text(active ? "Stream.Live" : "Stream.Offline"));
-
-	/* The destination cannot change under a running output, so the whole
-	 * editor is locked rather than letting an edit look like it took effect. */
-	if (applyStreamButton_) {
-		applyStreamButton_->setEnabled(!active);
-		serviceCombo_->setEnabled(!active);
-		serverCombo_->setEnabled(!active);
-		customServerEdit_->setEnabled(!active);
-		streamKeyEdit_->setEnabled(!active);
-		ignoreRecommendedCheck_->setEnabled(!active);
-
-		if (active) {
-			streamSettingsNoticeLabel_->setText(obs_module_text("StreamSettings.CannotEditWhileLive"));
-		} else {
-			streamSettingsNoticeLabel_->clear();
-		}
-	}
+	streamStatusLabel_->setText(obs_module_text(active ? "Stream.MainWindowLive" : "Stream.Offline"));
 }
 
 void StreamConsoleWindow::OnSignInClicked()

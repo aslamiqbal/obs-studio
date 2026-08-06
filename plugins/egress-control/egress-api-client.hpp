@@ -44,6 +44,15 @@ enum class EgressApiError {
 	RequestFailed = 10,
 };
 
+/* A platform the backend should broadcast to, and the credential it needs.
+ *
+ * The token is a live stream credential: it is sent to the backend and never
+ * written to the log. */
+struct EgressDestination {
+	QString platform;
+	QString token;
+};
+
 /* Outcome of a single backend call. Carries no raw response body so that
  * nothing sensitive reaches the UI or the log by accident. */
 struct EgressApiResult {
@@ -77,6 +86,11 @@ public:
 	void RequestStop(const QString &serviceId);
 	void RequestStatus();
 
+	/* Platforms sent with the next start request. Replaced wholesale rather
+	 * than merged, so unticking a destination actually removes it. */
+	void SetDestinations(const QList<EgressDestination> &destinations) { destinations_ = destinations; }
+	const QList<EgressDestination> &Destinations() const { return destinations_; }
+
 	/* Cancels an in-flight request without emitting a completion signal. */
 	void AbortPending();
 
@@ -104,4 +118,5 @@ private:
 	EgressConfig config_;
 	QNetworkAccessManager *networkManager_ = nullptr;
 	QPointer<QNetworkReply> pendingReply_;
+	QList<EgressDestination> destinations_;
 };

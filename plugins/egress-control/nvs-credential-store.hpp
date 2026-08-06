@@ -29,14 +29,24 @@
  */
 class NvsCredentialStore {
 public:
-	static bool Save(const QJsonObject &credentials);
-	static QJsonObject Load();
-	static void Clear();
+	/* The signed-in account session. */
+	static constexpr const char *AccountFile = "nvs-credentials.bin";
+
+	/* Per-platform broadcast tokens entered in the console. Kept in a separate
+	 * blob so signing out does not discard them, and vice versa. */
+	static constexpr const char *DestinationsFile = "nvs-destinations.bin";
+
+	/* Selected room plus its join address and token. */
+	static constexpr const char *RoomFile = "nvs-room.bin";
+
+	static bool Save(const QJsonObject &credentials, const char *fileName = AccountFile);
+	static QJsonObject Load(const char *fileName = AccountFile);
+	static void Clear(const char *fileName = AccountFile);
 
 	/* False when no platform sealing is available, so callers can explain why
 	 * the session will not be remembered. */
 	static bool IsEncryptionAvailable();
 
 private:
-	static QString FilePath();
+	static QString FilePath(const char *fileName);
 };

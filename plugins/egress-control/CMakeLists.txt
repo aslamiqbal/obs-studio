@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.28...3.30)
+﻿cmake_minimum_required(VERSION 3.28...3.30)
 
 find_package(Qt6 REQUIRED Widgets Network)
 
@@ -25,6 +25,12 @@ target_sources(
     nvs-fleet-client.hpp
     nvs-identity.cpp
     nvs-identity.hpp
+    nvs-multi-rtmp.cpp
+    nvs-multi-rtmp.hpp
+    nvs-room-client.cpp
+    nvs-room-client.hpp
+    nvs-stream-target-client.cpp
+    nvs-stream-target-client.hpp
     nvs-startup.cpp
     nvs-startup.hpp
     nvs-tray.cpp

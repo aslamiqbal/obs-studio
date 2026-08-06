@@ -117,6 +117,11 @@ void EgressController::Start()
 	apiClient_->RequestStart();
 }
 
+void EgressController::SetDestinations(const QList<EgressDestination> &destinations)
+{
+	apiClient_->SetDestinations(destinations);
+}
+
 void EgressController::Stop()
 {
 	if (state_ == EgressState::Stopping) {

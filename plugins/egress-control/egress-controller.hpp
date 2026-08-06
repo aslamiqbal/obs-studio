@@ -45,6 +45,9 @@ public:
 	void Start();
 	void Stop();
 
+	/* Platforms the backend should broadcast to on the next Start. */
+	void SetDestinations(const QList<EgressDestination> &destinations);
+
 	void QueryInitialStatus();
 	void HandleExit();
 

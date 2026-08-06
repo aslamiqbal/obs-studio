@@ -19,9 +19,11 @@
 
 #include <obs-module.h>
 
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonParseError>
 #include <QJsonValue>
+#include <QStringList>
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QNetworkRequest>
@@ -79,6 +81,35 @@ void EgressApiClient::RequestStart()
 	QJsonObject body;
 	body.insert("client", QLatin1String(CLIENT_NAME));
 	body.insert("platform", QLatin1String(CLIENT_PLATFORM));
+
+	if (!destinations_.isEmpty()) {
+		QJsonArray destinations;
+
+		for (const EgressDestination &destination : destinations_) {
+			QJsonObject entry;
+			entry.insert("platform", destination.platform);
+
+			/* An empty token is omitted rather than sent blank: the
+			 * backend may already hold a stored credential for the
+			 * platform, and a blank value would look like an override. */
+			if (!destination.token.isEmpty()) {
+				entry.insert("token", destination.token);
+			}
+
+			destinations.append(entry);
+		}
+
+		body.insert("destinations", destinations);
+
+		/* Platform names only — the tokens are credentials. */
+		QStringList names;
+		for (const EgressDestination &destination : destinations_) {
+			names << destination.platform;
+		}
+
+		blog(LOG_INFO, "[egress-control] start request targets: %s",
+		     names.join(QStringLiteral(", ")).toUtf8().constData());
+	}
 
 	Send(RequestKind::Start, config_.startPath, body, true);
 }

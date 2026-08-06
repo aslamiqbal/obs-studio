@@ -1,4 +1,4 @@
-/******************************************************************************
+﻿/******************************************************************************
     Copyright (C) 2026 by Aslam Iqbal
 
     This program is free software: you can redistribute it and/or modify
@@ -76,9 +76,9 @@ EgressConfig EgressConfig::Load()
 	EgressConfig config;
 
 	config.baseUrl = QString::fromUtf8(NvsApiEndpoints::DefaultBaseUrl);
-	config.startPath = NvsApiEndpoints::Egress::Start();
-	config.stopPath = NvsApiEndpoints::Egress::Stop();
-	config.statusPath = NvsApiEndpoints::Egress::Status();
+	config.startPath = NvsApiEndpoints::LegacyEgress::Start();
+	config.stopPath = NvsApiEndpoints::LegacyEgress::Stop();
+	config.statusPath = NvsApiEndpoints::LegacyEgress::Status();
 
 	BPtr<char> configPath = obs_module_get_config_path(obs_current_module(), CONFIG_FILE_NAME);
 
