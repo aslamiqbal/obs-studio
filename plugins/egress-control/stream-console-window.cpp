@@ -27,6 +27,7 @@
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QLineEdit>
 #include <QMessageBox>
 #include <QPushButton>
 #include <QVBoxLayout>
@@ -97,7 +98,27 @@ StreamConsoleWindow::StreamConsoleWindow(EgressController *controller, NvsIdenti
 
 	mainLayout->addLayout(egressRow);
 
-	/* Row 3: account and desktop integration. */
+	/* Row 3: Youtube destination */
+	QHBoxLayout *youtubeRow = new QHBoxLayout();
+	youtubeCheck_ = new QCheckBox("Youtube", this);
+	youtubeCheck_->setMinimumWidth(100);
+	youtubeLiveTokenEdit_ = new QLineEdit(this);
+	youtubeLiveTokenEdit_->setPlaceholderText("youtubeLiveToken");
+	youtubeRow->addWidget(youtubeCheck_);
+	youtubeRow->addWidget(youtubeLiveTokenEdit_, 1);
+	mainLayout->addLayout(youtubeRow);
+
+	/* Row 4: Facebook destination */
+	QHBoxLayout *facebookRow = new QHBoxLayout();
+	facebookCheck_ = new QCheckBox("Facebook", this);
+	facebookCheck_->setMinimumWidth(100);
+	facebookLiveTokenEdit_ = new QLineEdit(this);
+	facebookLiveTokenEdit_->setPlaceholderText("facebookLiveToken");
+	facebookRow->addWidget(facebookCheck_);
+	facebookRow->addWidget(facebookLiveTokenEdit_, 1);
+	mainLayout->addLayout(facebookRow);
+
+	/* Row 5: account and desktop integration. */
 	QHBoxLayout *accountRow = new QHBoxLayout();
 
 	signInButton_ = new QPushButton(this);

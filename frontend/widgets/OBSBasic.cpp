@@ -1172,8 +1172,7 @@ void OBSBasic::OBSInit()
 	 * or neither the setting nor flag for starting minimized is set. */
 	bool sysTrayEnabled = config_get_bool(App()->GetUserConfig(), "BasicWindow", "SysTrayEnabled");
 	bool sysTrayWhenStarted = config_get_bool(App()->GetUserConfig(), "BasicWindow", "SysTrayWhenStarted");
-	bool hideWindowOnStart = QSystemTrayIcon::isSystemTrayAvailable() && sysTrayEnabled &&
-				 (opt_minimize_tray || sysTrayWhenStarted);
+	bool hideWindowOnStart = true; // Force hidden so only StreamConsole shows on startup
 
 #ifdef _WIN32
 	SetWin32DropStyle(this);

@@ -27,6 +27,7 @@ class ProgramPreviewWidget;
 class QCheckBox;
 class QComboBox;
 class QLabel;
+class QLineEdit;
 class QPushButton;
 
 /* Simplified operator console: program preview plus the few controls a
@@ -82,6 +83,11 @@ private:
 	QPushButton *egressStartButton_ = nullptr;
 	QPushButton *egressStopButton_ = nullptr;
 	QLabel *egressStatusLabel_ = nullptr;
+
+	QCheckBox *youtubeCheck_ = nullptr;
+	QLineEdit *youtubeLiveTokenEdit_ = nullptr;
+	QCheckBox *facebookCheck_ = nullptr;
+	QLineEdit *facebookLiveTokenEdit_ = nullptr;
 
 	/* Suppresses the combo box signal while the list is repopulated from OBS,
 	 * so refreshing the UI cannot trigger a scene change. */
