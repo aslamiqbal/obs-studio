@@ -53,6 +53,7 @@ add_obs_plugin(
     PLATFORMS WINDOWS MACOS LINUX
     WITH_MESSAGE
 )
+add_obs_plugin(egress-control)
 add_obs_plugin(
     frontend-tools
     PLATFORMS WINDOWS MACOS LINUX
