@@ -51,10 +51,12 @@ public:
 
 private slots:
 	void OnStreamButtonClicked();
-	void OnStreamSettingsClicked();
 	void OnSceneSelected(int index);
 	void OnSignInClicked();
 	void OnStartupToggled(bool checked);
+	void OnServiceSelected(int index);
+	void OnToggleKeyVisibility();
+	void OnApplyStreamSettings();
 	void RefreshEgress();
 	void RefreshIdentity();
 
@@ -65,6 +67,19 @@ private:
 	void RefreshSceneList();
 	void RefreshCurrentScene();
 	void RefreshStreamingState();
+
+	/* Stream destination, rendered inline rather than in a separate dialog. */
+	QWidget *BuildStreamGroup();
+
+	/* Fills the service and server lists. Must run after all modules have
+	 * loaded, since rtmp-services registers after this plugin. */
+	void InitStreamSettings();
+	void PopulateServices();
+	void PopulateServersFor(const QString &serviceName);
+	void LoadCurrentService();
+	void RefreshRecommendations();
+	void ApplyServerRowMode();
+	bool IsCustomServiceSelected() const;
 
 	EgressController *controller_ = nullptr;
 	NvsIdentity *identity_ = nullptr;
@@ -77,8 +92,21 @@ private:
 
 	QComboBox *sceneSelector_ = nullptr;
 	QPushButton *streamButton_ = nullptr;
-	QPushButton *streamSettingsButton_ = nullptr;
 	QLabel *streamStatusLabel_ = nullptr;
+
+	/* Stream destination controls (formerly the Stream Settings dialog). */
+	QComboBox *serviceCombo_ = nullptr;
+	QComboBox *serverCombo_ = nullptr;
+	QLineEdit *customServerEdit_ = nullptr;
+	QLineEdit *streamKeyEdit_ = nullptr;
+	QPushButton *showKeyButton_ = nullptr;
+	QPushButton *applyStreamButton_ = nullptr;
+	QCheckBox *ignoreRecommendedCheck_ = nullptr;
+	QLabel *recommendationsLabel_ = nullptr;
+	QLabel *streamSettingsNoticeLabel_ = nullptr;
+
+	/* Suppresses combo signals while the service/server lists are rebuilt. */
+	bool updatingServiceLists_ = false;
 
 	QPushButton *egressStartButton_ = nullptr;
 	QPushButton *egressStopButton_ = nullptr;

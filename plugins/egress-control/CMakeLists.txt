@@ -33,8 +33,6 @@ target_sources(
     program-preview-widget.hpp
     stream-console-window.cpp
     stream-console-window.hpp
-    stream-settings-dialog.cpp
-    stream-settings-dialog.hpp
 )
 
 target_link_libraries(egress-control PRIVATE OBS::libobs OBS::frontend-api Qt::Widgets Qt::Network)
