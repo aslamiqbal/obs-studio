@@ -21,6 +21,7 @@
 #include <obs-module.h>
 #include <obs.hpp>
 
+#include <QCheckBox>
 #include <QCloseEvent>
 #include <QDesktopServices>
 #include <QIcon>
@@ -106,15 +107,18 @@ constexpr const char *YOUTUBE_DEFAULT_SERVER = "rtmps://a.rtmps.youtube.com/live
  * to the system output device, which nothing captures, and the stream goes
  * out silent even though the video is fine.
  *
- * Monitor-and-output keeps the operator hearing the room, since rerouting
- * stops CEF's own playback. The global capture channels are cleared at
- * startup, so monitoring cannot loop back into the mix. */
-void ForwardRoomAudio(obs_source_t *source, obs_data_t *settings)
+ * `localMute` is the Mute box: it only decides whether this PC plays the room
+ * out loud (monitoring). The source itself is never muted — that would
+ * silence the broadcast, which the box must not be able to do. The global
+ * capture channels are cleared at startup, so monitoring cannot loop back
+ * into the mix. */
+void ForwardRoomAudio(obs_source_t *source, obs_data_t *settings, bool localMute)
 {
 	obs_data_set_bool(settings, "reroute_audio", true);
 	obs_source_update(source, settings);
 
-	obs_source_set_monitoring_type(source, OBS_MONITORING_TYPE_MONITOR_AND_OUTPUT);
+	obs_source_set_monitoring_type(source, localMute ? OBS_MONITORING_TYPE_NONE
+							 : OBS_MONITORING_TYPE_MONITOR_AND_OUTPUT);
 	obs_source_set_muted(source, false);
 }
 
@@ -184,6 +188,14 @@ NvsWinEngress::NvsWinEngress(QWidget *parent) : QWidget(parent, Qt::Window)
 	streamKeyRow->addWidget(showStreamKeyButton_);
 
 	roomColumn->addLayout(streamKeyRow);
+
+	/* Checked by default: an egress machine should sit silent. Unchecking
+	 * lets the operator hear the room through this PC; the broadcast audio
+	 * is unaffected either way. */
+	muteCheck_ = new QCheckBox(obs_module_text("Engress.Mute"), this);
+	muteCheck_->setChecked(true);
+	muteCheck_->setToolTip(obs_module_text("Engress.MuteTip"));
+	roomColumn->addWidget(muteCheck_, 0, Qt::AlignLeft);
 
 	roomColumn->addStretch(1);
 
@@ -260,6 +272,8 @@ NvsWinEngress::NvsWinEngress(QWidget *parent) : QWidget(parent, Qt::Window)
 
 	connect(startEgressButton_, &QPushButton::clicked, this, &NvsWinEngress::OnStartEgressClicked);
 
+	connect(muteCheck_, &QCheckBox::toggled, this, &NvsWinEngress::OnMuteToggled);
+
 	connect(showStreamKeyButton_, &QPushButton::clicked, this, [this]() {
 		const bool visible = showStreamKeyButton_->isChecked();
 
@@ -310,11 +324,13 @@ void NvsWinEngress::ApplyRoomUrl()
 
 	struct ApplyContext {
 		QByteArray url;
+		bool localMute = true;
 		bool applied = false;
 		QString sourceName;
 	} context;
 
 	context.url = url.toUtf8();
+	context.localMute = muteCheck_->isChecked();
 
 	auto applyToItem = [](obs_scene_t *, obs_sceneitem_t *item, void *param) -> bool {
 		ApplyContext *ctx = static_cast<ApplyContext *>(param);
@@ -327,7 +343,7 @@ void NvsWinEngress::ApplyRoomUrl()
 
 		OBSDataAutoRelease settings = obs_data_create();
 		obs_data_set_string(settings, "url", ctx->url.constData());
-		ForwardRoomAudio(source, settings);
+		ForwardRoomAudio(source, settings, ctx->localMute);
 
 		ctx->applied = true;
 		ctx->sourceName = QString::fromUtf8(obs_source_get_name(source));
@@ -441,7 +457,9 @@ void NvsWinEngress::EnsureRoomAudioRouting()
 		return;
 	}
 
-	auto ensureOnItem = [](obs_scene_t *, obs_sceneitem_t *item, void *) -> bool {
+	bool localMute = muteCheck_->isChecked();
+
+	auto ensureOnItem = [](obs_scene_t *, obs_sceneitem_t *item, void *param) -> bool {
 		obs_source_t *source = obs_sceneitem_get_source(item);
 		const char *id = source ? obs_source_get_id(source) : nullptr;
 
@@ -452,7 +470,7 @@ void NvsWinEngress::EnsureRoomAudioRouting()
 		/* No URL here: obs_source_update merges, so the stored room link
 		 * is untouched. */
 		OBSDataAutoRelease settings = obs_data_create();
-		ForwardRoomAudio(source, settings);
+		ForwardRoomAudio(source, settings, *static_cast<bool *>(param));
 
 		blog(LOG_INFO, "[nvs] engress: room audio routed through OBS for browser source '%s'",
 		     obs_source_get_name(source));
@@ -461,7 +479,41 @@ void NvsWinEngress::EnsureRoomAudioRouting()
 		return false;
 	};
 
-	obs_scene_enum_items(scene, ensureOnItem, nullptr);
+	obs_scene_enum_items(scene, ensureOnItem, &localMute);
+}
+
+/* Only monitoring changes here — no obs_source_update — so toggling the box
+ * can never reload the room page, even mid-broadcast. */
+void NvsWinEngress::OnMuteToggled()
+{
+	bool localMute = muteCheck_->isChecked();
+
+	OBSSourceAutoRelease sceneSource = obs_frontend_get_current_scene();
+	obs_scene_t *scene = sceneSource ? obs_scene_from_source(sceneSource) : nullptr;
+
+	if (!scene) {
+		return;
+	}
+
+	auto applyToItem = [](obs_scene_t *, obs_sceneitem_t *item, void *param) -> bool {
+		obs_source_t *source = obs_sceneitem_get_source(item);
+		const char *id = source ? obs_source_get_id(source) : nullptr;
+
+		if (!id || strcmp(id, "browser_source") != 0) {
+			return true;
+		}
+
+		obs_source_set_monitoring_type(source, *static_cast<bool *>(param)
+							       ? OBS_MONITORING_TYPE_NONE
+							       : OBS_MONITORING_TYPE_MONITOR_AND_OUTPUT);
+
+		/* Same rule as ApplyRoomUrl: the first browser source is the room. */
+		return false;
+	};
+
+	obs_scene_enum_items(scene, applyToItem, &localMute);
+
+	blog(LOG_INFO, "[nvs] engress: local room playback %s", localMute ? "muted" : "unmuted");
 }
 
 void NvsWinEngress::HandleFrontendEvent(enum obs_frontend_event event)

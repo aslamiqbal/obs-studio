@@ -22,6 +22,7 @@
 #include <QWidget>
 
 class ProgramPreviewWidget;
+class QCheckBox;
 class QLabel;
 class QLineEdit;
 class QPushButton;
@@ -59,6 +60,11 @@ private slots:
 	 * Start Streaming button. */
 	void OnStartEgressClicked();
 
+	/* Local playback only: flips the room source's monitoring on or off.
+	 * The broadcast path (the audio tracks) is never touched, so the mute
+	 * box cannot silence the stream. */
+	void OnMuteToggled();
+
 protected:
 	/* Closing hides rather than quits, same as the console. */
 	void closeEvent(QCloseEvent *event) override;
@@ -77,6 +83,10 @@ private:
 	 * button opens. */
 	QLineEdit *streamKeyEdit_ = nullptr;
 	QPushButton *showStreamKeyButton_ = nullptr;
+
+	/* Checked by default: this PC stays silent while the room's audio still
+	 * reaches the broadcast. */
+	QCheckBox *muteCheck_ = nullptr;
 
 	QLineEdit *liveUrlEdit_ = nullptr;
 
