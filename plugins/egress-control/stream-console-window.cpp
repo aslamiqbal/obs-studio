@@ -457,7 +457,15 @@ void StreamConsoleWindow::OnApplyRoomToBrowserSource()
 
 		OBSDataAutoRelease settings = obs_data_create();
 		obs_data_set_string(settings, "url", ctx->url.constData());
+		/* The room's audio is the broadcast audio: route it through OBS
+		 * rather than CEF's direct playback, which NVS never captures.
+		 * Monitor-and-output keeps the operator hearing the room; the
+		 * global capture channels are cleared, so it cannot loop back. */
+		obs_data_set_bool(settings, "reroute_audio", true);
 		obs_source_update(source, settings);
+
+		obs_source_set_monitoring_type(source, OBS_MONITORING_TYPE_MONITOR_AND_OUTPUT);
+		obs_source_set_muted(source, false);
 
 		ctx->applied = true;
 		ctx->sourceName = QString::fromUtf8(obs_source_get_name(source));

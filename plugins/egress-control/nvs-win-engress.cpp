@@ -100,6 +100,24 @@ constexpr const char *YOUTUBE_SERVICE = "YouTube - RTMPS";
 constexpr const char *FACEBOOK_DEFAULT_SERVER = "rtmps://live-api-s.facebook.com:443/rtmp/";
 constexpr const char *YOUTUBE_DEFAULT_SERVER = "rtmps://a.rtmps.youtube.com/live2";
 
+/* The room's audio IS the broadcast audio: NVS captures no microphone and no
+ * desktop audio, so the browser source must hand its audio to OBS
+ * ("reroute_audio"). Left at the browser default, CEF plays the room straight
+ * to the system output device, which nothing captures, and the stream goes
+ * out silent even though the video is fine.
+ *
+ * Monitor-and-output keeps the operator hearing the room, since rerouting
+ * stops CEF's own playback. The global capture channels are cleared at
+ * startup, so monitoring cannot loop back into the mix. */
+void ForwardRoomAudio(obs_source_t *source, obs_data_t *settings)
+{
+	obs_data_set_bool(settings, "reroute_audio", true);
+	obs_source_update(source, settings);
+
+	obs_source_set_monitoring_type(source, OBS_MONITORING_TYPE_MONITOR_AND_OUTPUT);
+	obs_source_set_muted(source, false);
+}
+
 } // namespace
 
 NvsWinEngress::NvsWinEngress(QWidget *parent) : QWidget(parent, Qt::Window)
@@ -309,7 +327,7 @@ void NvsWinEngress::ApplyRoomUrl()
 
 		OBSDataAutoRelease settings = obs_data_create();
 		obs_data_set_string(settings, "url", ctx->url.constData());
-		obs_source_update(source, settings);
+		ForwardRoomAudio(source, settings);
 
 		ctx->applied = true;
 		ctx->sourceName = QString::fromUtf8(obs_source_get_name(source));
@@ -409,9 +427,49 @@ void NvsWinEngress::StopBlinking()
 	blinkTimer_->stop();
 }
 
+/* Repairs a browser source saved before audio rerouting existed: its URL
+ * persists in the scene collection, so an operator who only presses Start
+ * Egress never runs ApplyRoomUrl. Runs at FINISHED_LOADING because flipping
+ * the routing reloads the page — acceptable at startup, never mid-stream.
+ * Once routing is on, the browser plugin skips the no-op update entirely. */
+void NvsWinEngress::EnsureRoomAudioRouting()
+{
+	OBSSourceAutoRelease sceneSource = obs_frontend_get_current_scene();
+	obs_scene_t *scene = sceneSource ? obs_scene_from_source(sceneSource) : nullptr;
+
+	if (!scene) {
+		return;
+	}
+
+	auto ensureOnItem = [](obs_scene_t *, obs_sceneitem_t *item, void *) -> bool {
+		obs_source_t *source = obs_sceneitem_get_source(item);
+		const char *id = source ? obs_source_get_id(source) : nullptr;
+
+		if (!id || strcmp(id, "browser_source") != 0) {
+			return true;
+		}
+
+		/* No URL here: obs_source_update merges, so the stored room link
+		 * is untouched. */
+		OBSDataAutoRelease settings = obs_data_create();
+		ForwardRoomAudio(source, settings);
+
+		blog(LOG_INFO, "[nvs] engress: room audio routed through OBS for browser source '%s'",
+		     obs_source_get_name(source));
+
+		/* Same rule as ApplyRoomUrl: the first browser source is the room. */
+		return false;
+	};
+
+	obs_scene_enum_items(scene, ensureOnItem, nullptr);
+}
+
 void NvsWinEngress::HandleFrontendEvent(enum obs_frontend_event event)
 {
 	switch (event) {
+	case OBS_FRONTEND_EVENT_FINISHED_LOADING:
+		EnsureRoomAudioRouting();
+		break;
 	case OBS_FRONTEND_EVENT_STREAMING_STARTING:
 		startEgressButton_->setEnabled(false);
 		startEgressButton_->setText(obs_module_text("Engress.Starting"));

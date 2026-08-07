@@ -92,5 +92,10 @@ private:
 	void StartBlinking();
 	void StopBlinking();
 
+	/* Makes sure the room browser source feeds its audio to OBS — the only
+	 * audio NVS broadcasts. Runs at FINISHED_LOADING for sources saved
+	 * before rerouting was applied. */
+	void EnsureRoomAudioRouting();
+
 	QLabel *roomNoticeLabel_ = nullptr;
 };
