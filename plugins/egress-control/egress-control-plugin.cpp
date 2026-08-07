@@ -66,15 +66,17 @@ NvsTray *tray = nullptr;
 /* Reports this install to the backend and applies admin commands. */
 NvsFleetClient *fleet = nullptr;
 
-void ShowConsole()
+/* Brings up the window NVS presents to the operator. */
+void ShowPrimaryWindow()
 {
-	if (console.isNull()) {
+	if (engressWindow.isNull()) {
 		return;
 	}
 
-	console->show();
-	console->raise();
-	console->activateWindow();
+	/* showNormal() so a minimised window is restored, not just raised. */
+	engressWindow->showNormal();
+	engressWindow->raise();
+	engressWindow->activateWindow();
 }
 
 void OBSFrontendEvent(enum obs_frontend_event event, void *)
@@ -112,10 +114,8 @@ void OBSFrontendEvent(enum obs_frontend_event event, void *)
 		 * still opens nothing. */
 		if (NvsTray::StartedHidden()) {
 			blog(LOG_INFO, "[nvs] started hidden; windows are available from the tray menu");
-		} else if (!engressWindow.isNull()) {
-			engressWindow->show();
-			engressWindow->raise();
-			engressWindow->activateWindow();
+		} else {
+			ShowPrimaryWindow();
 		}
 	} else if (event == OBS_FRONTEND_EVENT_EXIT) {
 		/* Stop reporting before teardown so no heartbeat races shutdown. */
@@ -181,12 +181,14 @@ bool obs_module_load(void)
 	/* Attached later: the frontend creates its tray icon during startup, so
 	 * the entries go in once loading has finished. */
 	tray = new NvsTray(controller, identity, console.data());
+	/* The tray opens the startup window, not the older console. */
+	tray->SetPrimaryWindow(engressWindow.data());
 
 	fleet = new NvsFleetClient(baseUrl, controller, identity);
-	fleet->SetShowConsoleHandler([]() { ShowConsole(); });
+	fleet->SetShowConsoleHandler([]() { ShowPrimaryWindow(); });
 
 	obs_frontend_add_tools_menu_item(
-		obs_module_text("StreamConsole"), [](void *) { ShowConsole(); }, nullptr);
+		obs_module_text("Engress.Title"), [](void *) { ShowPrimaryWindow(); }, nullptr);
 
 	obs_frontend_add_event_callback(OBSFrontendEvent, nullptr);
 

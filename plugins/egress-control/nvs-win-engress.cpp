@@ -45,7 +45,7 @@ namespace {
 constexpr const char *FACEBOOK_LIVE_PRODUCER_URL = "https://www.facebook.com/live/producer?ref=OBS";
 
 /* Prefilled room, so the window works without typing during development. */
-constexpr const char *DEFAULT_ROOM_CODE = "XEJEDF";
+constexpr const char *DEFAULT_ROOM_CODE = "JYWMBL";
 constexpr const char *DEFAULT_ROOM_TOKEN = "my_custom_api_key";
 
 constexpr int ICON_SIZE = 14;
@@ -266,11 +266,9 @@ QString NvsWinEngress::RoomUrl() const
 	 * not send to the server, so it stays out of access logs even though the
 	 * whole string is a URL.
 	 *
-	 * `signaling_token` is the key the participant page reads
-	 * (readEgressSignalingToken); `#token=` fell through to the guest path and
-	 * showed the login screen instead of the room. */
-	return QStringLiteral(
-		       "https://nadavox.com/rooms/%1/participant?egress=true&autojoin=1&name=OBS#signaling_token=%2")
+	 * `#token=` is the agreed form; the participant page accepts it as an
+	 * alias for `signaling_token` when the fragment carries no `url`. */
+	return QStringLiteral("https://nadavox.com/rooms/%1/participant?egress=true&autojoin=1&name=OBS#token=%2")
 		.arg(QString::fromUtf8(QUrl::toPercentEncoding(code)))
 		.arg(QString::fromUtf8(QUrl::toPercentEncoding(token)));
 }

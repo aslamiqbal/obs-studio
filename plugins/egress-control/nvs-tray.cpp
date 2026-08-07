@@ -60,6 +60,27 @@ bool NvsTray::StartedHidden()
 	return false;
 }
 
+void NvsTray::SetPrimaryWindow(QWidget *window)
+{
+	primaryWindow_ = window;
+}
+
+void NvsTray::ShowPrimaryWindow()
+{
+	QWidget *target = !primaryWindow_.isNull() ? primaryWindow_.data()
+						   : static_cast<QWidget *>(console_.data());
+
+	if (!target) {
+		return;
+	}
+
+	/* showNormal() rather than show(): a window left minimised would otherwise
+	 * come back still minimised. */
+	target->showNormal();
+	target->raise();
+	target->activateWindow();
+}
+
 bool NvsTray::Attach()
 {
 	if (!trayIcon_.isNull()) {
@@ -103,15 +124,17 @@ bool NvsTray::Attach()
 	menu->insertAction(before, egressStartAction_);
 	menu->insertAction(before, egressStopAction_);
 
-	connect(consoleAction_, &QAction::triggered, this, [this]() {
-		if (console_.isNull()) {
-			return;
-		}
+	connect(consoleAction_, &QAction::triggered, this, [this]() { ShowPrimaryWindow(); });
 
-		console_->show();
-		console_->raise();
-		console_->activateWindow();
-	});
+	/* Double-click opens the window. OBS itself only handles Trigger (single
+	 * click, which toggles the main window), so this adds a gesture rather
+	 * than fighting one. */
+	connect(trayIcon_.data(), &QSystemTrayIcon::activated, this,
+		[this](QSystemTrayIcon::ActivationReason reason) {
+			if (reason == QSystemTrayIcon::DoubleClick) {
+				ShowPrimaryWindow();
+			}
+		});
 
 	connect(egressStartAction_, &QAction::triggered, this, [this]() {
 		controller_->Start();

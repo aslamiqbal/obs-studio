@@ -40,6 +40,13 @@ public:
 	NvsTray(EgressController *controller, NvsIdentity *identity, StreamConsoleWindow *console,
 		QObject *parent = nullptr);
 
+	/* The window the tray's open entry and a double-click bring up. */
+	void SetPrimaryWindow(QWidget *window);
+
+	/* Raises that window, falling back to the console so the entry is never
+	 * dead. */
+	void ShowPrimaryWindow();
+
 	/* Finds the frontend's tray icon and installs the NVS entries. Safe to
 	 * call once the frontend has finished loading. Returns false when no tray
 	 * is available, in which case nothing is changed. */
@@ -60,6 +67,10 @@ private:
 	EgressController *controller_ = nullptr;
 	NvsIdentity *identity_ = nullptr;
 	QPointer<StreamConsoleWindow> console_;
+
+	/* The window the tray entry opens. Set to the engress window so the menu
+	 * matches what NVS shows at startup, rather than the older console. */
+	QPointer<QWidget> primaryWindow_;
 
 	QPointer<QSystemTrayIcon> trayIcon_;
 
