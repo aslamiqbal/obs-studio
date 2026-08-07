@@ -264,8 +264,13 @@ QString NvsWinEngress::RoomUrl() const
 
 	/* Fixed template. The credential goes in the fragment, which browsers do
 	 * not send to the server, so it stays out of access logs even though the
-	 * whole string is a URL. */
-	return QStringLiteral("https://nadavox.com/rooms/%1/participant?egress=true&autojoin=1&name=OBS#token=%2")
+	 * whole string is a URL.
+	 *
+	 * `signaling_token` is the key the participant page reads
+	 * (readEgressSignalingToken); `#token=` fell through to the guest path and
+	 * showed the login screen instead of the room. */
+	return QStringLiteral(
+		       "https://nadavox.com/rooms/%1/participant?egress=true&autojoin=1&name=OBS#signaling_token=%2")
 		.arg(QString::fromUtf8(QUrl::toPercentEncoding(code)))
 		.arg(QString::fromUtf8(QUrl::toPercentEncoding(token)));
 }
